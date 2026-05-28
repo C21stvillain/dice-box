@@ -36,6 +36,15 @@ During local Vite dev or preview, `GET /api/roll?notation=2d20` runs the Ammo di
 
 Open `/api-replay.html` while the Vite server is running to fetch an API roll, paste replay JSON, and play the recorded frames client-side.
 
+If you do not need a roll API, replace normal browser rolls with `rollTrace`. It runs the usual local Dice Box roll, captures the replay frames, and returns the same trace shape that `replay` accepts:
+
+```javascript
+const trace = await box.rollTrace("2d20");
+// save trace remotely in your own app
+
+await box.replay(trace);
+```
+
 Client code can fetch the same payload and store it wherever your app owns persistence:
 
 ```javascript

@@ -48,6 +48,69 @@ const decodeFrameData = frames => {
 	throw new Error('Replay payload is missing Float32Array frame data.')
 }
 
+const encodeFrameData = frameData => {
+	const bytes = new Uint8Array(frameData.buffer, frameData.byteOffset, frameData.byteLength)
+	if (typeof Buffer !== 'undefined') {
+		return Buffer.from(bytes).toString('base64')
+	}
+
+	let binary = ''
+	const chunkSize = 0x8000
+	for (let i = 0; i < bytes.length; i += chunkSize) {
+		binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+	}
+	return btoa(binary)
+}
+
+const createTracePayload = ({ notation, results, recording, config, canvas, theme, themeColor }) => {
+	const frameData = recording.frameData || new Float32Array()
+	const frameRate = recording.frameRate || 60
+	const dieCount = recording.renderDice?.length || 0
+	const stride = 8
+	const frameCount = dieCount ? frameData.length / (dieCount * stride) : 0
+	const rolls = results.flatMap(group => group.rolls || [])
+
+	return {
+		version: 1,
+		metadata: {
+			notation,
+			generatedAt: new Date().toISOString(),
+			seed: null,
+			theme,
+			themeColor,
+			timedOut: false,
+			config: {
+				width: canvas?.clientWidth || canvas?.width,
+				height: canvas?.clientHeight || canvas?.height,
+				scale: config.scale,
+				frameRate,
+				delay: config.delay,
+				settleTimeout: config.settleTimeout,
+			},
+			results,
+			rolls,
+			renderDice: recording.renderDice || [],
+			frame: {
+				type: 'Float32Array',
+				fields: ['id', 'px', 'py', 'pz', 'qx', 'qy', 'qz', 'qw'],
+				stride,
+				dieCount,
+				frameCount,
+				frameRate,
+				length: frameData.length,
+				durationMs: Math.round(frameCount * (1000 / frameRate)),
+			},
+		},
+		frames: {
+			type: 'Float32Array',
+			encoding: 'base64',
+			littleEndian: true,
+			length: frameData.length,
+			data: encodeFrameData(frameData),
+		},
+	}
+}
+
 const createRollApiUrl = (input = {}) => {
 	if (typeof input === 'string') {
 		return input
@@ -552,6 +615,32 @@ class WorldFacade {
 			onComplete(replayResults)
 		}
 		return replayResults
+	}
+
+	async rollTrace(notation, { frameRate = 60, ...rollOptions } = {}) {
+		if (typeof this.#DiceWorld.startRecording !== 'function' || typeof this.#DiceWorld.stopRecording !== 'function') {
+			throw new Error('The active DiceBox world does not support roll tracing.')
+		}
+
+		this.#DiceWorld.startRecording({ frameRate })
+
+		try {
+			await this.roll(notation, rollOptions)
+			const results = this.getRollResults()
+			const recording = await this.#DiceWorld.stopRecording()
+			return createTracePayload({
+				notation,
+				results,
+				recording,
+				config: this.config,
+				canvas: this.canvas,
+				theme: rollOptions.theme || this.config.theme,
+				themeColor: rollOptions.themeColor || this.config.themeColor,
+			})
+		} catch (error) {
+			await this.#DiceWorld.stopRecording()
+			throw error
+		}
 	}
 
 	fetchRollTrace(input = {}, fetchOptions = {}) {

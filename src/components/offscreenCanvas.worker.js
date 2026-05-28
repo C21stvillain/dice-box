@@ -26,6 +26,18 @@ self.onmessage = async (e) => {
 		case "removeDie":
 			WorldOffscreen.remove(e.data.options)
 			break;
+		case "startRecording":
+			WorldOffscreen.startRecording(e.data.options)
+			break;
+		case "stopRecording": {
+			const recording = WorldOffscreen.stopRecording()
+			self.postMessage({
+				action:"recording-stopped",
+				id: e.data.id,
+				recording
+			}, [recording.frameData.buffer])
+			break;
+		}
 		case "replay":
 			await WorldOffscreen.replay({
 				metadata: e.data.metadata,

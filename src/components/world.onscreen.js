@@ -39,6 +39,7 @@ class WorldOnscreen {
 	#physicsWorkerPort
 	#meshList = {}
 	#replayFrameRequest = null
+	#recording = null
 	noop = () => {}
 	diceBufferView = new Float32Array(8000)
 
@@ -230,6 +231,114 @@ class WorldOnscreen {
 		this.#scene.render()
 	}
 
+	#rememberRecordingDie(die) {
+		if(!this.#recording || !die?.config || this.#recording.renderDice.has(die.id)) {
+			return
+		}
+
+		const {assetPath, enableShadows, lights, scale, ...config} = die.config
+		this.#recording.renderDice.set(die.id, {
+			...config,
+			id: die.id,
+			auxiliary: !!die.dieParent,
+			auxiliaryType: die.dieParent ? 'd100-ones' : undefined,
+			resultRollId: config.rollId,
+		})
+	}
+
+	#dieRecordingState(die) {
+		if(!die?.mesh) {
+			return [
+				die.id,
+				0,
+				-100,
+				0,
+				0,
+				0,
+				0,
+				1,
+			]
+		}
+
+		const position = die.mesh.position
+		const quaternion = die.mesh.rotationQuaternion
+		return [
+			die.id,
+			position.x,
+			position.y,
+			position.z,
+			quaternion?.x || 0,
+			quaternion?.y || 0,
+			quaternion?.z || 0,
+			quaternion?.w || 1,
+		]
+	}
+
+	#recordFrame() {
+		if(!this.#recording) {
+			return
+		}
+
+		const rows = new Map()
+		Object.values(this.#dieCache).forEach(die => {
+			this.#rememberRecordingDie(die)
+			rows.set(die.id, this.#dieRecordingState(die))
+		})
+
+		if(rows.size) {
+			this.#recording.frames.push(rows)
+		}
+	}
+
+	startRecording({frameRate = 60} = {}) {
+		this.#recording = {
+			frameRate,
+			frames: [],
+			renderDice: new Map(),
+		}
+	}
+
+	stopRecording() {
+		if(!this.#recording) {
+			return {
+				frameData: new Float32Array(),
+				frameRate: 60,
+				renderDice: [],
+			}
+		}
+
+		this.#recordFrame()
+
+		const recording = this.#recording
+		this.#recording = null
+		const renderDice = Array.from(recording.renderDice.values())
+		const lastState = new Map()
+		const floats = []
+
+		recording.frames.forEach(frame => {
+			renderDice.forEach(die => {
+				const state = frame.get(die.id) || lastState.get(die.id) || [
+					die.id,
+					0,
+					-100,
+					0,
+					0,
+					0,
+					0,
+					1,
+				]
+				lastState.set(die.id, state)
+				floats.push(...state)
+			})
+		})
+
+		return {
+			frameData: new Float32Array(floats),
+			frameRate: recording.frameRate,
+			renderDice,
+		}
+	}
+
 	async replay({metadata, frameData, speed = 1}) {
 		this.clear()
 		this.#engine.stopRenderLoop()
@@ -334,6 +443,7 @@ class WorldOnscreen {
 			config: rest
 		}
 		this.#dieCache[id] = newDie
+		this.#rememberRecordingDie(newDie)
 		
 		// double timeout to ensure any real dice have a chance to queue up and rollResults isn't triggered right away
 		setTimeout(()=>{
@@ -360,6 +470,7 @@ class WorldOnscreen {
 		
 		// save the die just created to the cache
 		this.#dieCache[newDie.id] = newDie
+		this.#rememberRecordingDie(newDie)
 		
 		// tell the physics engine to roll this die type - which is a low poly collider
 		this.#physicsWorkerPort.postMessage({
@@ -385,6 +496,7 @@ class WorldOnscreen {
 			})
 			// add the d10 to the cache and ask the physics worker for a collider
 			this.#dieCache[`${newDie.d10Instance.id}`] = newDie.d10Instance
+			this.#rememberRecordingDie(newDie.d10Instance)
 			this.#physicsWorkerPort.postMessage({
 				action: "addDie",
 				options: {
@@ -471,6 +583,8 @@ class WorldOnscreen {
 
 		bufferIndex = bufferIndex + 8
 	}
+
+	this.#recordFrame()
 
 	// transfer the buffer back to physics worker
 	requestAnimationFrame(()=>{

@@ -6,6 +6,7 @@ class WorldOffScreen {
 	themeLoadedInit = false
 	pendingThemePromises = {}
 	pendingReplayPromises = {}
+	pendingRecordingPromises = {}
 	#offscreenCanvas
 	#OffscreenWorker
 	// onInitComplete = () => {} // init callback
@@ -68,6 +69,12 @@ class WorldOffScreen {
 						delete this.pendingReplayPromises[e.data.id]
 					}
 					break;
+				case 'recording-stopped':
+					if(e.data.id && this.pendingRecordingPromises[e.data.id]){
+						this.pendingRecordingPromises[e.data.id](e.data.recording)
+						delete this.pendingRecordingPromises[e.data.id]
+					}
+					break;
 			}
 		}
 		// await Promise.all([this.#OffscreenWorker.init])
@@ -116,6 +123,21 @@ class WorldOffScreen {
 	
 	addNonDie(options){
 		this.#OffscreenWorker.postMessage({action: "addNonDie", options})
+	}
+
+	startRecording(options) {
+		this.#OffscreenWorker.postMessage({action: "startRecording", options})
+	}
+
+	stopRecording() {
+		return new Promise((resolve) => {
+			const id = `recording-${Date.now()}-${Math.random()}`
+			this.pendingRecordingPromises[id] = resolve
+			this.#OffscreenWorker.postMessage({
+				action: "stopRecording",
+				id
+			})
+		})
 	}
 
 	replay({metadata, frameData, speed}) {
