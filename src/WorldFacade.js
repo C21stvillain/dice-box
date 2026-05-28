@@ -48,7 +48,72 @@ const decodeFrameData = frames => {
 	throw new Error('Replay payload is missing Float32Array frame data.')
 }
 
+const createRollApiUrl = (input = {}) => {
+	if (typeof input === 'string') {
+		return input
+	}
+
+	const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+	const {
+		endpoint = '/api/roll',
+		dice,
+		notation,
+		roll,
+		params = {},
+		...rest
+	} = input
+	const url = new URL(endpoint, origin)
+
+	const addParam = (key, value, { append = false } = {}) => {
+		if (value === undefined || value === null || value === '') {
+			return
+		}
+		if (Array.isArray(value)) {
+			if (!append) {
+				url.searchParams.delete(key)
+			}
+			value.forEach(item => addParam(key, item, { append: true }))
+			return
+		}
+		if (append) {
+			url.searchParams.append(key, String(value))
+		} else {
+			url.searchParams.set(key, String(value))
+		}
+	}
+
+	if (Array.isArray(dice)) {
+		url.searchParams.delete('notation')
+		url.searchParams.delete('roll')
+		url.searchParams.delete('dice')
+		dice.forEach(value => addParam('dice', value, { append: true }))
+	} else {
+		const notationValue = notation || roll || dice
+		if (notationValue) {
+			url.searchParams.delete('dice')
+		}
+		addParam('notation', notationValue)
+	}
+
+	Object.entries({...rest, ...params}).forEach(([key, value]) => addParam(key, value))
+
+	if (typeof window !== 'undefined' && url.origin === window.location.origin) {
+		return `${url.pathname}${url.search}`
+	}
+	return url.toString()
+}
+
 class WorldFacade {
+	static createRollApiUrl = createRollApiUrl
+	static async fetchRollTrace(input = {}, fetchOptions = {}) {
+		const response = await fetch(createRollApiUrl(input), fetchOptions)
+		const payload = await response.json()
+		if(!response.ok) {
+			throw new Error(payload.error || response.statusText)
+		}
+		return payload
+	}
+
 	rollCollectionData = {}
 	rollGroupData = {}
 	rollDiceData = {}
@@ -487,6 +552,16 @@ class WorldFacade {
 			onComplete(replayResults)
 		}
 		return replayResults
+	}
+
+	fetchRollTrace(input = {}, fetchOptions = {}) {
+		return WorldFacade.fetchRollTrace(input, fetchOptions)
+	}
+
+	async replayFromApi(input = {}, replayOptions = {}) {
+		const trace = await this.fetchRollTrace(input)
+		const results = await this.replay(trace, replayOptions)
+		return { trace, results }
 	}
 
 	hide(className) {

@@ -36,6 +36,28 @@ During local Vite dev or preview, `GET /api/roll?notation=2d20` runs the Ammo di
 
 Open `/api-replay.html` while the Vite server is running to fetch an API roll, paste replay JSON, and play the recorded frames client-side.
 
+Client code can fetch the same payload and store it wherever your app owns persistence:
+
+```javascript
+import DiceBox from "@3d-dice/dice-box";
+
+const trace = await DiceBox.fetchRollTrace({ notation: "2d20" });
+// save trace remotely in your own app
+
+const box = new DiceBox({ container: "#dice-box", assetPath: "/assets/dice-box/" });
+await box.init();
+await box.replay(trace);
+```
+
+Server-side code can create the same response shape without making an HTTP request:
+
+```javascript
+import { simulateRoll } from "./server/index.js";
+
+const trace = await simulateRoll({ notation: "2d20" });
+// save trace remotely in your own app
+```
+
 __New demo for version 1.0.8__ <br>
 Use this module as an ES6 module from [UNPKG CDN](https://unpkg.com/browse/@3d-dice/dice-box@1.0.8/) <br>
 No need to use npm install or serve these files yourself. [Static CDN Demo](https://codesandbox.io/s/dice-es6-module-cdn-lhbs99?file=/src/index.js) <br><br>

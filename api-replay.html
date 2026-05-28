@@ -271,13 +271,12 @@
 			}
 
 			const endpointWithCanvasSize = value => {
-				const url = new URL(value, window.location.origin)
 				const canvas = document.querySelector('#dice-box canvas')
-				if (canvas) {
-					url.searchParams.set('width', String(canvas.clientWidth || canvas.width))
-					url.searchParams.set('height', String(canvas.clientHeight || canvas.height))
-				}
-				return url.origin === window.location.origin ? `${url.pathname}${url.search}` : url.toString()
+				return DiceBox.createRollApiUrl({
+					endpoint: value,
+					width: canvas ? canvas.clientWidth || canvas.width : undefined,
+					height: canvas ? canvas.clientHeight || canvas.height : undefined,
+				})
 			}
 
 			const replayPayload = async () => {
