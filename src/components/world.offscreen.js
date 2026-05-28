@@ -5,6 +5,7 @@ class WorldOffScreen {
 	offscreenWorkerInit = false
 	themeLoadedInit = false
 	pendingThemePromises = {}
+	pendingReplayPromises = {}
 	#offscreenCanvas
 	#OffscreenWorker
 	// onInitComplete = () => {} // init callback
@@ -61,6 +62,12 @@ class WorldOffScreen {
 				case 'die-removed':
 					this.onDieRemoved(e.data.rollId)
 					break;
+				case 'replay-complete':
+					if(e.data.id && this.pendingReplayPromises[e.data.id]){
+						this.pendingReplayPromises[e.data.id](e.data.results)
+						delete this.pendingReplayPromises[e.data.id]
+					}
+					break;
 			}
 		}
 		// await Promise.all([this.#OffscreenWorker.init])
@@ -109,6 +116,20 @@ class WorldOffScreen {
 	
 	addNonDie(options){
 		this.#OffscreenWorker.postMessage({action: "addNonDie", options})
+	}
+
+	replay({metadata, frameData, speed}) {
+		return new Promise((resolve) => {
+			const id = `replay-${Date.now()}-${Math.random()}`
+			this.pendingReplayPromises[id] = resolve
+			this.#OffscreenWorker.postMessage({
+				action: "replay",
+				id,
+				metadata,
+				frameData,
+				speed
+			}, [frameData.buffer])
+		})
 	}
 
 	remove(options){

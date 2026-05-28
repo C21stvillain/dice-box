@@ -21,6 +21,33 @@ const defaultOptions = {
 	suspendSimulation: false
 }
 
+const decodeFrameData = frames => {
+	if (frames instanceof Float32Array) {
+		return frames
+	}
+	if (Array.isArray(frames)) {
+		return new Float32Array(frames)
+	}
+	if (frames?.data && Array.isArray(frames.data)) {
+		return new Float32Array(frames.data)
+	}
+	if (frames?.type === 'Float32Array' && frames?.encoding === 'base64') {
+		let binary
+		if (typeof atob === 'function') {
+			binary = atob(frames.data)
+		} else if (typeof Buffer !== 'undefined') {
+			const buffer = Buffer.from(frames.data, 'base64')
+			return new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / Float32Array.BYTES_PER_ELEMENT)
+		}
+		const bytes = new Uint8Array(binary.length)
+		for (let i = 0; i < binary.length; i++) {
+			bytes[i] = binary.charCodeAt(i)
+		}
+		return new Float32Array(bytes.buffer)
+	}
+	throw new Error('Replay payload is missing Float32Array frame data.')
+}
+
 class WorldFacade {
 	rollCollectionData = {}
 	rollGroupData = {}
@@ -429,6 +456,38 @@ class WorldFacade {
 		// make this method chainable
 		return this
   }
+
+	async replay(trace, { speed = 1, onComplete } = {}) {
+		const payload = typeof trace === 'string' ? JSON.parse(trace) : trace
+		const metadata = payload.metadata || payload
+		const frameData = decodeFrameData(payload.frames || payload.frameData)
+
+		if (!metadata?.renderDice?.length || !metadata?.frame) {
+			throw new Error('Replay payload is missing metadata.renderDice or metadata.frame.')
+		}
+		if (typeof this.#DiceWorld.replay !== 'function') {
+			throw new Error('The active DiceBox world does not support replay.')
+		}
+
+		this.clear()
+
+		const themes = [...new Set(metadata.renderDice.map(die => die.theme || metadata.theme || this.config.theme))]
+		for (const theme of themes) {
+			await this.loadThemeQueue.push(() => this.loadTheme(theme))
+		}
+
+		const results = await this.#DiceWorld.replay({
+			metadata,
+			frameData,
+			speed,
+		})
+
+		const replayResults = results || metadata.results
+		if (onComplete) {
+			onComplete(replayResults)
+		}
+		return replayResults
+	}
 
 	hide(className) {
 		if(className){

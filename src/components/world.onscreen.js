@@ -7,6 +7,21 @@ import Container from './Container'
 import Dice from './Dice'
 import ThemeLoader from './ThemeLoader'
 
+const requestReplayFrame = callback => {
+	if (typeof requestAnimationFrame === 'function') {
+		return requestAnimationFrame(callback)
+	}
+	return setTimeout(() => callback(typeof performance !== 'undefined' ? performance.now() : Date.now()), 16)
+}
+
+const cancelReplayFrame = frameId => {
+	if (typeof cancelAnimationFrame === 'function') {
+		cancelAnimationFrame(frameId)
+	} else {
+		clearTimeout(frameId)
+	}
+}
+
 class WorldOnscreen {
 	config
 	initialized = false
@@ -23,6 +38,7 @@ class WorldOnscreen {
 	#themeLoader
 	#physicsWorkerPort
 	#meshList = {}
+	#replayFrameRequest = null
 	noop = () => {}
 	diceBufferView = new Float32Array(8000)
 
@@ -186,6 +202,10 @@ class WorldOnscreen {
 	}
 
 	clear() {
+		if(this.#replayFrameRequest !== null) {
+			cancelReplayFrame(this.#replayFrameRequest)
+			this.#replayFrameRequest = null
+		}
 		if(!Object.keys(this.#dieCache).length && !this.#sleeperCount) {
 			return
 		}
@@ -208,6 +228,89 @@ class WorldOnscreen {
 
 		// step the animation forward
 		this.#scene.render()
+	}
+
+	async replay({metadata, frameData, speed = 1}) {
+		this.clear()
+		this.#engine.stopRenderLoop()
+
+		const renderDice = metadata.renderDice || []
+		const frameMeta = metadata.frame || {}
+		const stride = frameMeta.stride || 8
+		const dieCount = frameMeta.dieCount || renderDice.length
+		const frameCount = frameMeta.frameCount || Math.floor(frameData.length / (dieCount * stride))
+		const frameRate = frameMeta.frameRate || 60
+		const playbackSpeed = Math.max(Number(speed) || 1, .05)
+		const frameDuration = 1000 / frameRate / playbackSpeed
+
+		await Promise.all(renderDice.map(async die => {
+			const diceOptions = {
+				...die,
+				assetPath: this.config.assetPath,
+				enableShadows: this.config.enableShadows,
+				scale: this.config.scale,
+				lights: this.#lights,
+				colorSuffix: die.colorSuffix || '',
+				themeColor: die.themeColor || metadata.themeColor || this.config.themeColor,
+				theme: die.theme || metadata.theme || this.config.theme,
+				meshName: die.meshName,
+			}
+			await Dice.loadDie(diceOptions, this.#scene)
+			const newDie = new Dice(diceOptions, this.#scene)
+			this.#dieCache[newDie.id] = newDie
+		}))
+
+		const applyFrame = frameIndex => {
+			const frameOffset = frameIndex * dieCount * stride
+			for (let i = 0; i < dieCount; i++) {
+				const offset = frameOffset + i * stride
+				const id = frameData[offset]
+				const die = this.#dieCache[`${id}`]
+				if(!die?.mesh) {
+					continue
+				}
+				die.mesh.position.set(
+					frameData[offset + 1],
+					frameData[offset + 2],
+					frameData[offset + 3]
+				)
+				die.mesh.rotationQuaternion.set(
+					frameData[offset + 4],
+					frameData[offset + 5],
+					frameData[offset + 6],
+					frameData[offset + 7]
+				)
+			}
+			this.#scene.render()
+		}
+
+		if(!frameCount) {
+			return metadata.results
+		}
+
+		return new Promise(resolve => {
+			let startTime
+			let lastFrame = -1
+			const animate = now => {
+				if(startTime === undefined) {
+					startTime = now
+				}
+				const frameIndex = Math.min(Math.floor((now - startTime) / frameDuration), frameCount - 1)
+				if(frameIndex !== lastFrame) {
+					applyFrame(frameIndex)
+					lastFrame = frameIndex
+				}
+				if(frameIndex >= frameCount - 1) {
+					this.#replayFrameRequest = null
+					resolve(metadata.results)
+					return
+				}
+				this.#replayFrameRequest = requestReplayFrame(animate)
+			}
+
+			applyFrame(0)
+			this.#replayFrameRequest = requestReplayFrame(animate)
+		})
 	}
 
 	add(options) {

@@ -26,6 +26,18 @@ self.onmessage = async (e) => {
 		case "removeDie":
 			WorldOffscreen.remove(e.data.options)
 			break;
+		case "replay":
+			await WorldOffscreen.replay({
+				metadata: e.data.metadata,
+				frameData: e.data.frameData,
+				speed: e.data.speed
+			})
+			self.postMessage({
+				action:"replay-complete",
+				id: e.data.id,
+				results: e.data.metadata.results
+			})
+			break;
     case "resize":
 			WorldOffscreen.resize(e.data.options)
       break

@@ -3,9 +3,13 @@ import { defineConfig } from 'vite'
 import copy from 'rollup-plugin-copy'
 import del from 'rollup-plugin-delete'
 import minifyEs from './rollup-plugin-minifyEs'
+import rollApiPlugin from './server/vite-roll-api'
 
 export default defineConfig({
 	base: process.env.NODE_ENV === 'production' ? './' : './src',
+	plugins: [
+		rollApiPlugin(),
+	],
   build: {
     lib: {
       entry: path.resolve(__dirname, 'src/index.js'),

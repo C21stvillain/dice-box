@@ -12,6 +12,30 @@ The docs site is available at [fantasticdice.games](https://fantasticdice.games)
 __New demo for version 1.0.11__ <br>
 The latest code running on AWS [Dice Box](https://d3rivgcgaqw1jo.cloudfront.net/index.html)
 
+## Roll API Replay
+
+During local Vite dev or preview, `GET /api/roll?notation=2d20` runs the Ammo dice simulation server-side and returns compact replay JSON. Metadata stays as normal JSON, while animation frames are encoded as Float32Array bytes:
+
+```json
+{
+  "metadata": {
+    "results": [],
+    "renderDice": [],
+    "frame": {
+      "type": "Float32Array",
+      "fields": ["id", "px", "py", "pz", "qx", "qy", "qz", "qw"]
+    }
+  },
+  "frames": {
+    "type": "Float32Array",
+    "encoding": "base64",
+    "data": "..."
+  }
+}
+```
+
+Open `/api-replay.html` while the Vite server is running to fetch an API roll, paste replay JSON, and play the recorded frames client-side.
+
 __New demo for version 1.0.8__ <br>
 Use this module as an ES6 module from [UNPKG CDN](https://unpkg.com/browse/@3d-dice/dice-box@1.0.8/) <br>
 No need to use npm install or serve these files yourself. [Static CDN Demo](https://codesandbox.io/s/dice-es6-module-cdn-lhbs99?file=/src/index.js) <br><br>
