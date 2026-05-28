@@ -39,7 +39,6 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "prepare": "npm run build",
     "copy-assets": "node copyAssets.js"
   },
   "dependencies": {
