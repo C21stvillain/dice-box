@@ -1,0 +1,7 @@
+name = "dice-box-roll-api"
+main = "workers/dice-roll/index.js"
+compatibility_date = "2026-05-28"
+
+# Paid Workers can raise CPU time if real physics rolls need more room:
+# [limits]
+# cpu_ms = 30000

@@ -67,6 +67,34 @@ const trace = await simulateRoll({ notation: "2d20" });
 // save trace remotely in your own app
 ```
 
+### Cloudflare Workers
+
+This repo includes a real Cloudflare Worker roll API at `workers/dice-roll/index.js`. It bundles the default dice collider data and the actual `ammo.wasm.wasm` physics engine, then serves the same trace JSON from:
+
+```
+GET /api/roll?notation=2d20
+```
+
+Run it locally:
+
+```bash
+npm run cf:dev
+```
+
+Build/check the Worker bundle:
+
+```bash
+npm run cf:dry-run
+```
+
+Deploy with Wrangler:
+
+```bash
+npm run cf:deploy
+```
+
+The Worker currently bundles the `default` theme only. Real physics can use more CPU than the Workers free-tier 10 ms request limit for some rolls; paid Workers can raise `cpu_ms` in `wrangler.toml` if needed.
+
 __New demo for version 1.0.8__ <br>
 Use this module as an ES6 module from [UNPKG CDN](https://unpkg.com/browse/@3d-dice/dice-box@1.0.8/) <br>
 No need to use npm install or serve these files yourself. [Static CDN Demo](https://codesandbox.io/s/dice-es6-module-cdn-lhbs99?file=/src/index.js) <br><br>
