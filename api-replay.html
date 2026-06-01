@@ -150,10 +150,97 @@
 			}
 
 			.result {
+				display: grid;
+				gap: 10px;
+				max-height: 240px;
 				min-height: 22px;
+				overflow: auto;
 				color: #f5f7f8;
 				font-size: 14px;
+			}
+
+			.final-line {
 				font-weight: 700;
+			}
+
+			.result-group {
+				display: grid;
+				gap: 6px;
+				padding-top: 10px;
+				border-top: 1px solid #2b3033;
+			}
+
+			.result-group:first-child {
+				padding-top: 0;
+				border-top: 0;
+			}
+
+			.group-heading {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 6px;
+				align-items: center;
+				justify-content: space-between;
+				color: #dce4e8;
+				font-size: 13px;
+				font-weight: 700;
+			}
+
+			.group-dice {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 6px;
+			}
+
+			.die-chip,
+			.result-badge {
+				display: inline-flex;
+				align-items: center;
+				min-height: 24px;
+				border-radius: 6px;
+				white-space: nowrap;
+			}
+
+			.die-chip {
+				gap: 5px;
+				padding: 3px 7px;
+				border: 1px solid #343a3f;
+				background: #101317;
+				color: #f5f7f8;
+				font-size: 12px;
+			}
+
+			.die-chip.is-muted {
+				color: #8d979e;
+				text-decoration: line-through;
+			}
+
+			.die-chip.is-extra {
+				border-color: #3e5d7a;
+				background: #132235;
+			}
+
+			.result-badge {
+				padding: 2px 6px;
+				background: #24313a;
+				color: #c7d4dc;
+				font-size: 11px;
+				font-weight: 700;
+			}
+
+			.result-badge.is-good {
+				background: #1d3c2a;
+				color: #91e5a8;
+			}
+
+			.result-badge.is-warn {
+				background: #44341f;
+				color: #f0c46c;
+			}
+
+			.result-badge.is-bad {
+				background: #4a2528;
+				color: #f1a0a8;
 			}
 
 			.status {
@@ -215,7 +302,7 @@
 					<label>
 						Endpoint
 						<div class="row">
-							<input id="endpoint" value="/api/roll?notation=2d20kh1" spellcheck="false" />
+							<input id="endpoint" value="/api/roll?notation=%7B2d6%2C3d6%7Dkl1" spellcheck="false" />
 							<button id="fetch-roll" type="button">Fetch</button>
 						</div>
 					</label>
@@ -259,22 +346,148 @@
 				status.textContent = message
 			}
 
+			const appendText = (parent, text, className) => {
+				const element = document.createElement('span')
+				element.className = className || ''
+				element.textContent = text
+				parent.append(element)
+				return element
+			}
+
+			const appendBadge = (parent, text, type = '') => {
+				const className = ['result-badge', type && `is-${type}`].filter(Boolean).join(' ')
+				return appendText(parent, text, className)
+			}
+
+			const dieLabel = roll => roll.dieType || (roll.sides === 'fate' ? 'dF' : `d${roll.sides}`)
+
+			const collectDroppedGroupRolls = (node, dropped = new Set(), inheritedDrop = false) => {
+				if (!node || typeof node !== 'object') {
+					return dropped
+				}
+				const canDropChildren = ['die', 'diceexpressionroll', 'expressionroll', 'grouproll'].includes(node.type)
+				const childDrop = inheritedDrop || (canDropChildren && (node.drop || node.valid === false))
+				if (inheritedDrop && Number.isInteger(node.physicalRollIndex)) {
+					dropped.add(node.physicalRollIndex)
+				}
+				Object.values(node).forEach(value => {
+					if (Array.isArray(value)) {
+						value.forEach(item => collectDroppedGroupRolls(item, dropped, childDrop))
+					} else if (value && typeof value === 'object') {
+						collectDroppedGroupRolls(value, dropped, childDrop)
+					}
+				})
+				return dropped
+			}
+
+			const getRollFlags = (roll, droppedGroupRolls) => {
+				const parser = roll.parser || {}
+				const flags = []
+				const physicalRollIndex = parser.physicalRollIndex
+				if (Number.isInteger(physicalRollIndex) && droppedGroupRolls.has(physicalRollIndex)) {
+					flags.push(['group drop', 'bad'])
+				}
+				if (parser.drop) {
+					flags.push(['drop', 'bad'])
+				}
+				if (parser.valid === false && !parser.drop && !parser.folded) {
+					flags.push(['invalid', 'bad'])
+				}
+				if (parser.reroll) {
+					flags.push(['rerolled', 'warn'])
+				}
+				if (roll.reroll && !parser.reroll) {
+					flags.push(['extra', ''])
+				}
+				if (parser.explode) {
+					flags.push(['explode', 'warn'])
+				}
+				if (parser.folded) {
+					flags.push(['folded', 'warn'])
+				}
+				if (parser.matched) {
+					flags.push(['match', 'good'])
+				}
+				if (parser.critical === 'success') {
+					flags.push(['crit', 'good'])
+				}
+				if (parser.critical === 'failure') {
+					flags.push(['fail', 'bad'])
+				}
+				if (parser.success === true) {
+					flags.push(['success', 'good'])
+				}
+				if (parser.success === false) {
+					flags.push(['failure', 'bad'])
+				}
+				if (parser.successes) {
+					flags.push([`S:${parser.successes}`, 'good'])
+				}
+				if (parser.failures) {
+					flags.push([`F:${parser.failures}`, 'bad'])
+				}
+				if (Number.isInteger(parser.order)) {
+					flags.push([`ord ${parser.order}`, ''])
+				}
+				if (parser.value !== undefined && Number(parser.value) !== Number(roll.value)) {
+					flags.push([`parser ${parser.value}`, 'warn'])
+				}
+				return flags
+			}
+
 			const setResults = trace => {
 				const metadata = trace?.metadata || {}
 				const results = metadata.results || []
+				const droppedGroupRolls = collectDroppedGroupRolls(metadata.finalResult?.details)
+
+				result.textContent = ''
 				if (metadata.finalResult) {
 					const label = metadata.finalResult.notation || metadata.notation || 'Roll'
-					result.textContent = `${label}: ${metadata.finalResult.value}`
-					return
+					appendText(result, `${label}: ${metadata.finalResult.value}`, 'final-line')
 				}
 				if (!results?.length) {
-					result.textContent = ''
+					if (!metadata.finalResult) {
+						result.textContent = ''
+					}
 					return
 				}
-				result.textContent = results.map(group => {
+
+				results.forEach((group, index) => {
 					const label = group.notation || `${group.qty}d${group.sides}`
-					return `${label}: ${group.value}`
-				}).join('   ')
+					const groupRollIndexes = (group.rolls || [])
+						.map(roll => roll.parser?.physicalRollIndex)
+						.filter(Number.isInteger)
+					const groupDropped = groupRollIndexes.length > 0 && groupRollIndexes.every(rollIndex => droppedGroupRolls.has(rollIndex))
+					const groupElement = document.createElement('div')
+					groupElement.className = 'result-group'
+
+					const heading = document.createElement('div')
+					heading.className = 'group-heading'
+					appendText(heading, `Group ${index + 1} · ${label}`, '')
+					appendText(heading, `= ${group.value}`, '')
+					if (groupDropped) {
+						appendBadge(heading, 'group drop', 'bad')
+					}
+					groupElement.append(heading)
+
+					const dice = document.createElement('div')
+					dice.className = 'group-dice'
+					;(group.rolls || []).forEach(roll => {
+						const flags = getRollFlags(roll, droppedGroupRolls)
+						const chip = document.createElement('div')
+						const muted = flags.some(([flag]) => ['drop', 'group drop', 'invalid', 'rerolled', 'folded'].includes(flag))
+						chip.className = [
+							'die-chip',
+							muted && 'is-muted',
+							roll.reroll && 'is-extra',
+						].filter(Boolean).join(' ')
+						appendText(chip, `${dieLabel(roll)}:${roll.value}`, '')
+						flags.forEach(([flag, type]) => appendBadge(chip, flag, type))
+						dice.append(chip)
+					})
+					groupElement.append(dice)
+					result.append(groupElement)
+				})
 			}
 
 			const endpointWithCanvasSize = value => {
