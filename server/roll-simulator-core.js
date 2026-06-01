@@ -580,7 +580,8 @@ const resolveDieValue = ({ renderDie, state, themeData }) => {
 		throw new Error(`Unable to resolve ${renderDie.dieType} result from final frame.`)
 	}
 
-	return faceMap[faceId]
+	const value = faceMap[faceId]
+	return renderDie.dieType === 'd10' && renderDie.sides === 10 && value === 0 ? 10 : value
 }
 
 export const encodeFrames = frameData => {

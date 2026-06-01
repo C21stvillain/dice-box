@@ -56,7 +56,12 @@ Client code can fetch the same payload and store it wherever your app owns persi
 ```javascript
 import DiceBox from "@3d-dice/dice-box";
 
-const trace = await DiceBox.fetchRollTrace({ notation: "2d20kh1" });
+const trace = await DiceBox.fetchRollTrace({
+  notation: "2d20kh1",
+  theme: "smooth",
+  width: 900,
+  height: 520
+});
 // save trace remotely in your own app
 
 const box = new DiceBox({ container: "#dice-box", assetPath: "/assets/dice-box/" });
@@ -75,10 +80,10 @@ const trace = await simulateRoll({ notation: "4d6dl1" });
 
 ### Cloudflare Workers
 
-This repo includes a real Cloudflare Worker roll API at `workers/dice-roll/index.js`. It bundles the default dice collider data and the actual `ammo.wasm.wasm` physics engine, then serves the same trace JSON from:
+This repo includes a real Cloudflare Worker roll API at `workers/dice-roll/index.js`. It bundles the default and smooth dice collider data and the actual `ammo.wasm.wasm` physics engine, then serves the same trace JSON from:
 
 ```
-GET /api/roll?notation=2d20kh1
+GET /api/roll?notation=2d20kh1&theme=smooth
 ```
 
 Run it locally:
@@ -99,7 +104,7 @@ Deploy with Wrangler:
 npm run cf:deploy
 ```
 
-The Worker currently bundles the `default` theme only. Real physics can use more CPU than the Workers free-tier 10 ms request limit for some rolls; paid Workers can raise `cpu_ms` in `wrangler.toml` if needed.
+The Worker currently bundles the `default` and `smooth` themes. Real physics can use more CPU than the Workers free-tier 10 ms request limit for some rolls; paid Workers can raise `cpu_ms` in `wrangler.toml` if needed.
 
 __New demo for version 1.0.8__ <br>
 Use this module as an ES6 module from [UNPKG CDN](https://unpkg.com/browse/@3d-dice/dice-box@1.0.8/) <br>

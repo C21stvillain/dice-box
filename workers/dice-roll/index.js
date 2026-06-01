@@ -2,6 +2,8 @@ import AmmoFactory from './ammo.worker.es.js'
 import ammoWasm from '../../public/assets/dice-box/ammo/ammo.wasm.wasm'
 import defaultMeshData from '../../public/assets/dice-box/themes/default/default.json'
 import defaultThemeConfig from '../../public/assets/dice-box/themes/default/theme.config.json'
+import smoothMeshData from '../../public/assets/dice-box/themes/smooth/smoothDice.json'
+import smoothThemeConfig from '../../public/assets/dice-box/themes/smooth/theme.config.json'
 import { simulateRollWithLoaders } from '../../server/roll-simulator-core.js'
 
 const corsHeaders = {
@@ -11,7 +13,17 @@ const corsHeaders = {
 }
 
 let ammoPromise
-let defaultThemeData
+const themeDataCache = new Map()
+const bundledThemes = {
+	default: {
+		meshData: defaultMeshData,
+		themeConfig: defaultThemeConfig,
+	},
+	smooth: {
+		meshData: smoothMeshData,
+		themeConfig: smoothThemeConfig,
+	},
+}
 
 const numberParam = (params, key) => {
 	const value = params.get(key)
@@ -65,43 +77,60 @@ const getAmmo = async () => {
 
 const clone = value => JSON.parse(JSON.stringify(value))
 
-const buildDefaultThemeData = () => {
-	if (defaultThemeData) {
-		return defaultThemeData
+const buildThemeData = theme => {
+	if (themeDataCache.has(theme)) {
+		return themeDataCache.get(theme)
 	}
 
-	const meshFile = defaultThemeConfig.meshFile || 'default.json'
-	const meshName = meshFile.replace(/(.*)\..{2,4}$/, '$1')
-	const colliderFaceMap = clone(defaultMeshData.colliderFaceMap)
-	const colliders = defaultMeshData.meshes
+	const bundle = bundledThemes[theme]
+	if (!bundle) {
+		throw new Error(`Cloudflare Worker roll simulation bundles only 'default' and 'smooth' themes. Received '${theme}'.`)
+	}
+
+	const { meshData, themeConfig } = bundle
+	const meshFile = themeConfig.meshFile || 'default.json'
+	const meshName = themeConfig.meshName || meshFile.replace(/(.*)\..{2,4}$/, '$1')
+	const colliderFaceMap = clone(meshData.colliderFaceMap)
+	const colliders = meshData.meshes
 		.filter(model => model.name.includes('collider'))
 		.map(model => ({ ...model }))
 
-	if (!defaultThemeConfig.diceAvailable) {
-		throw new Error("Theme 'default' does not define diceAvailable.")
+	if (!themeConfig.diceAvailable) {
+		throw new Error(`Theme '${theme}' does not define diceAvailable.`)
 	}
 	if (!colliderFaceMap) {
-		throw new Error("Theme 'default' mesh 'default.json' does not include colliderFaceMap data.")
+		throw new Error(`Theme '${theme}' mesh '${meshFile}' does not include colliderFaceMap data.`)
 	}
 
-	defaultThemeData = {
-		...defaultThemeConfig,
-		theme: 'default',
-		basePath: '/assets/dice-box/themes/default',
-		meshFilePath: 'default.json',
+	const hasD10 = colliders.some(model => model.id === 'd10_collider')
+	const hasD100 = colliders.some(model => model.id === 'd100_collider')
+
+	if (!hasD100 && hasD10) {
+		const d10Collider = colliders.find(model => model.id === 'd10_collider')
+		colliders.push({ ...d10Collider, id: 'd100_collider', name: 'd100_collider' })
+		colliderFaceMap.d100 = clone(colliderFaceMap.d10)
+		Object.keys(colliderFaceMap.d100).forEach(key => {
+			const value = colliderFaceMap.d100[key]
+			colliderFaceMap.d100[key] = value * (value === 10 ? 0 : 10)
+		})
+	}
+
+	const themeData = {
+		...themeConfig,
+		theme,
+		basePath: `/assets/dice-box/themes/${theme}`,
+		meshFilePath: meshFile,
 		meshName,
 		colliders,
 		colliderFaceMap,
 		d4FaceDown: true,
 	}
-	return defaultThemeData
+	themeDataCache.set(theme, themeData)
+	return themeData
 }
 
 const loadThemeData = async ({ theme = 'default' }) => {
-	if (theme !== 'default') {
-		throw new Error(`Cloudflare Worker roll simulation currently bundles only the 'default' theme. Received '${theme}'.`)
-	}
-	return buildDefaultThemeData()
+	return buildThemeData(theme)
 }
 
 const simulateFromRequest = request => {

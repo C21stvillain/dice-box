@@ -29,6 +29,7 @@
 
 			button,
 			input,
+			select,
 			textarea {
 				font: inherit;
 			}
@@ -93,6 +94,7 @@
 			}
 
 			input,
+			select,
 			textarea {
 				width: 100%;
 				border: 1px solid #343a3f;
@@ -102,12 +104,14 @@
 				outline: none;
 			}
 
-			input {
+			input,
+			select {
 				height: 38px;
 				padding: 0 11px;
 			}
 
 			input:focus,
+			select:focus,
 			textarea:focus {
 				border-color: #58b879;
 				box-shadow: 0 0 0 2px rgba(88, 184, 121, .16);
@@ -307,6 +311,13 @@
 						</div>
 					</label>
 					<label>
+						Theme
+						<select id="theme">
+							<option value="default">Default</option>
+							<option value="smooth">Smooth</option>
+						</select>
+					</label>
+					<label>
 						Playback
 						<div class="row">
 							<input id="speed" value="1" inputmode="decimal" />
@@ -329,6 +340,7 @@
 			import DiceBox from '/src/index.js'
 
 			const endpoint = document.querySelector('#endpoint')
+			const theme = document.querySelector('#theme')
 			const payload = document.querySelector('#payload')
 			const fetchRoll = document.querySelector('#fetch-roll')
 			const replayJson = document.querySelector('#replay-json')
@@ -494,6 +506,7 @@
 				const canvas = document.querySelector('#dice-box canvas')
 				return DiceBox.createRollApiUrl({
 					endpoint: value,
+					theme: theme.value,
 					width: canvas ? canvas.clientWidth || canvas.width : undefined,
 					height: canvas ? canvas.clientHeight || canvas.height : undefined,
 				})
