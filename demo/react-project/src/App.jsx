@@ -27,7 +27,7 @@ function App() {
   // set up the callback for when the dice are finished rolling - https://fantasticdice.games/docs/usage/callbacks
   Dice.onRollComplete = (results) => {
     console.log('results', results)
-    setRollResult(results[0].value)
+    setRollResult(results.finalResult?.value ?? results[0].value)
   }
 
   // handle on form submit
@@ -42,7 +42,7 @@ function App() {
     <div className="App">
       <h1>Dice Rolling Demo</h1>
       <form id='roller' onSubmit={handleRoll}>
-        <input id='notation' type='text' placeholder='3d6' />
+        <input id='notation' type='text' placeholder='2d20kh1' />
         <button type='submit'>Roll</button>
       </form>
       <span id='result'>Result: {rollResult}</span>

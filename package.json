@@ -42,9 +42,11 @@
     "cf:dev": "wrangler dev --config wrangler.toml",
     "cf:deploy": "wrangler deploy --config wrangler.toml",
     "cf:dry-run": "wrangler deploy --dry-run --outdir dist/cloudflare-worker --config wrangler.toml",
-    "copy-assets": "node copyAssets.js"
+    "copy-assets": "node copyAssets.js",
+    "test:roll20-adapter": "node scripts/verify-roll20-adapter.js"
   },
   "dependencies": {
+    "@3d-dice/dice-roller-parser": "^0.2.6",
     "@babylonjs/core": "5.57.1",
     "@babylonjs/loaders": "5.57.1",
     "@babylonjs/materials": "5.57.1",

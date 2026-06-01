@@ -1,6 +1,10 @@
 import { createCanvas } from './components/world/canvas'
 import physicsWorker from './components/physics.worker.js?worker&inline'
 import { debounce, createAsyncQueue, Random, hexToRGB, webgl_support } from './helpers'
+import {
+	computeFinalResult,
+	parseRollNotationInput,
+} from './parser/roll20Adapter'
 
 const defaultOptions = {
 	id: `dice-canvas-${Date.now()}`, // set the canvas id
@@ -18,7 +22,11 @@ const defaultOptions = {
 	assetPath: '/assets/dice-box/', // path to 'ammo', 'themes' folders and web workers
 	// origin: location.origin,
 	origin: typeof window !== "undefined" ? window.location.origin : "",
-	suspendSimulation: false
+	suspendSimulation: false,
+	maxNotationLength: 200,
+	maxDiceCount: 100,
+	maxSides: 100,
+	maxRerollDepth: 100,
 }
 
 const decodeFrameData = frames => {
@@ -62,18 +70,26 @@ const encodeFrameData = frameData => {
 	return btoa(binary)
 }
 
-const createTracePayload = ({ notation, results, recording, config, canvas, theme, themeColor }) => {
+const createTracePayload = ({ notation, results, finalResult, recording, config, canvas, theme, themeColor }) => {
 	const frameData = recording.frameData || new Float32Array()
 	const frameRate = recording.frameRate || 60
 	const dieCount = recording.renderDice?.length || 0
 	const stride = 8
 	const frameCount = dieCount ? frameData.length / (dieCount * stride) : 0
 	const rolls = results.flatMap(group => group.rolls || [])
+	const fallbackFinalResult = {
+		value: results.reduce((total, group) => total + (Number(group.value) || 0), 0),
+		notation: Array.isArray(notation) ? notation.join(',') : String(notation),
+		type: 'legacy',
+		success: null,
+		successes: 0,
+		failures: 0,
+	}
 
 	return {
 		version: 1,
 		metadata: {
-			notation,
+			notation: Array.isArray(notation) ? notation.join(',') : String(notation),
 			generatedAt: new Date().toISOString(),
 			seed: null,
 			theme,
@@ -88,6 +104,7 @@ const createTracePayload = ({ notation, results, recording, config, canvas, them
 				settleTimeout: config.settleTimeout,
 			},
 			results,
+			finalResult: finalResult || fallbackFinalResult,
 			rolls,
 			renderDice: recording.renderDice || [],
 			frame: {
@@ -186,6 +203,7 @@ class WorldFacade {
 	#groupIndex = 0
 	#rollIndex = 0
 	#idIndex = 0
+	#lastRollCollectionId = null
 	#DiceWorld = {}
 	#diceWorldPromise
 	#diceWorldResolve
@@ -627,10 +645,12 @@ class WorldFacade {
 		try {
 			await this.roll(notation, rollOptions)
 			const results = this.getRollResults()
+			const finalResult = this.#getFinalResultForCollection(this.#lastRollCollectionId, results)
 			const recording = await this.#DiceWorld.stopRecording()
 			return createTracePayload({
 				notation,
 				results,
+				finalResult,
 				recording,
 				config: this.config,
 				canvas: this.canvas,
@@ -682,6 +702,45 @@ class WorldFacade {
 		return this
 	}
 
+	#getParserOptions() {
+		return {
+			maxNotationLength: this.config.maxNotationLength,
+			maxDiceCount: this.config.maxDiceCount,
+			maxSides: this.config.maxSides,
+			maxRerollDepth: this.config.maxRerollDepth,
+		}
+	}
+
+	#prepareNotationForCollection(notation, collectionId, diceAvailable) {
+		const collection = this.rollCollectionData[collectionId]
+		if (typeof notation === 'string') {
+			const parsedRoll = parseRollNotationInput(notation, diceAvailable, this.#getParserOptions())
+			collection.parsedRoll = parsedRoll
+			return parsedRoll.diceGroups
+		}
+
+		const parsedNotation = this.createNotationArray(notation, diceAvailable)
+		collection.parsedRoll = {
+			originalNotation: Array.isArray(notation) ? notation.join(',') : '',
+			parserNotation: null,
+			diceGroups: parsedNotation,
+			parsedTree: null,
+			mode: 'legacy',
+		}
+		return parsedNotation
+	}
+
+	#getFinalResultForCollection(collectionId, results) {
+		const collection = this.rollCollectionData[collectionId]
+		if (!collection?.parsedRoll) {
+			return null
+		}
+		return computeFinalResult(collection.parsedRoll.parsedTree, results, {
+			originalNotation: collection.parsedRoll.originalNotation || collection.notation,
+			maxRerollDepth: this.config.maxRerollDepth,
+		})
+	}
+
 	// TODO: pass data with roll - such as roll name. Passed back at the end in the results
 	roll(notation, {theme = this.config.theme, themeColor = this.config.themeColor, newStartPoint = true} = {}) {
 		// note: to add to a roll on screen use .add method
@@ -696,8 +755,9 @@ class WorldFacade {
 			themeColor,
 			newStartPoint
 		})
+		this.#lastRollCollectionId = collectionId
 
-		const parsedNotation = this.createNotationArray(notation, this.themesLoadedData[theme].diceAvailable)
+		const parsedNotation = this.#prepareNotationForCollection(notation, collectionId, this.themesLoadedData[theme].diceAvailable)
 		this.#makeRoll(parsedNotation, collectionId)
 
 		// returns a Promise that is resolved in onRollComplete
@@ -715,8 +775,9 @@ class WorldFacade {
 			themeColor,
 			newStartPoint
 		})
+		this.#lastRollCollectionId = collectionId
 		
-		const parsedNotation = this.createNotationArray(notation, this.themesLoadedData[theme].diceAvailable)
+		const parsedNotation = this.#prepareNotationForCollection(notation, collectionId, this.themesLoadedData[theme].diceAvailable)
 		this.#makeRoll(parsedNotation, collectionId)
 
 		// returns a Promise that is resolved in onRollComplete
@@ -905,6 +966,10 @@ class WorldFacade {
 	// accepts object {sides:int, qty:int}
 	// accepts array of objects eg: [{sides:int, qty:int, mods:[]}]
 	createNotationArray(input, diceAvailable){
+		if (typeof input === 'string') {
+			return parseRollNotationInput(input, diceAvailable, this.#getParserOptions()).diceGroups
+		}
+
 		const notation = Array.isArray( input ) ? input : [ input ]
 		let parsedNotation = []
 
@@ -954,7 +1019,7 @@ class WorldFacade {
 			// console.log('roll', roll)
 			// if notation is an array of strings
 			if ( typeof roll === 'string' ) {
-				parsedNotation.push( this.parse( roll, diceAvailable ) )
+				parsedNotation.push( ...parseRollNotationInput(roll, diceAvailable, this.#getParserOptions()).diceGroups )
 			} else if ( typeof notation === 'object' ) {
 				verifyRollId( roll )
 				verifyObject( roll )  && parsedNotation.push( roll )
@@ -964,59 +1029,13 @@ class WorldFacade {
 		return parsedNotation
 	}
 
-  // parse text die notation such as 2d10+3 => {number:2, type:6, modifier:3}
-  // taken from https://github.com/ChapelR/dice-notation
+  // parse text die notation such as 2d10+3 => {qty:2, sides:'d10', modifier:3}
   parse(notation, diceAvailable) {
-    const diceNotation = /(\d+)([dD]{1}\d+)(.*)$/i
-		const percentNotation = /(\d+)[dD](00|%)(.*)$/i
-		const fudgeNotation = /(\d+)[dD](f+[ate]*)(.*)$/i
-		// const customNotation = /(\d+)[dD](.*)([+-])/i
-		const customNotation = /(\d+)[dD]([\d\w]+)([+-]{0,1}\d+)?/i
-    const modifier = /([+-])(\d+)/
-    const cleanNotation = notation.trim().replace(/\s+/g, '')
-    const validNumber = (n, err) => {
-      n = Number(n)
-      if (Number.isNaN(n) || !Number.isInteger(n) || n < 1) {
-        throw new Error(err);
-      }
-      return n
-    }
-
-		// match percentNotation before diceNotation
-    const roll = cleanNotation.match(percentNotation) || cleanNotation.match(diceNotation) || cleanNotation.match(fudgeNotation) || cleanNotation.match(customNotation);
-
-		let mod = 0;
-    const msg = 'Invalid notation: ' + notation + '';
-
-    if (!roll || !roll.length || roll.length < 3) {
-      throw new Error(msg);
-    }
-    if (roll[3] && modifier.test(roll[3])) {
-      const modParts = roll[3].match(modifier);
-      let basicMod = validNumber(modParts[2], msg);
-      if (modParts[1].trim() === '-') {
-        basicMod *= -1;
-      }
-      mod = basicMod;
-    }
-
-		const returnObj = {
-			qty : validNumber(roll[1], msg),
-      modifier: mod,
+		const parsed = parseRollNotationInput(notation, diceAvailable, this.#getParserOptions()).diceGroups
+		if (parsed.length !== 1) {
+			throw new Error('Roll notation expands to multiple dice groups. Use createNotationArray() for compound notation.')
 		}
-
-		if(cleanNotation.match(percentNotation)){
-			returnObj.sides = 'd100'
-			returnObj.data = 'single'
-		} else if(cleanNotation.match(fudgeNotation)){
-			returnObj.sides = 'fate' // force lowercase
-		} else if(diceAvailable.includes(cleanNotation.match(customNotation)[2])){
-			returnObj.sides = roll[2] // dice type instead of number
-		} else {
-			returnObj.sides = roll[2];
-		}
-
-    return returnObj
+		return parsed[0]
   }
 
 	#parseGroup(groupId) {
@@ -1039,7 +1058,7 @@ class WorldFacade {
 
 	getRollResults(){
 		// loop through each roll group
-		return Object.entries(this.rollGroupData).map(([key,val]) => {
+		const results = Object.entries(this.rollGroupData).map(([key,val]) => {
 			// parse the group data to get the value and the rolls as an array
 			const groupData = this.#parseGroup(key)
 			// set the value for this roll group in this.rollGroupData
@@ -1053,6 +1072,20 @@ class WorldFacade {
 			// return the groupCopy - note: we never return this.rollGroupData
 			return groupCopy
 		})
+		let finalResult = null
+		try {
+			finalResult = this.#getFinalResultForCollection(this.#lastRollCollectionId, results)
+		} catch (error) {
+			finalResult = null
+		}
+		if (finalResult) {
+			Object.defineProperty(results, 'finalResult', {
+				value: finalResult,
+				enumerable: false,
+				configurable: true,
+			})
+		}
+		return results
 	}
 }
 

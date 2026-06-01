@@ -1,3 +1,8 @@
+import {
+	computeFinalResult,
+	parseRollNotationInput,
+} from '../src/parser/roll20Adapter.js'
+
 export const defaultRollOptions = {
 	width: 800,
 	height: 600,
@@ -18,6 +23,10 @@ export const defaultRollOptions = {
 	theme: 'default',
 	themeColor: '#2e8555',
 	maxDurationMs: 10000,
+	maxNotationLength: 200,
+	maxDiceCount: 100,
+	maxSides: 100,
+	maxRerollDepth: 100,
 }
 
 const hashSeed = seed => {
@@ -66,73 +75,9 @@ const getColorSuffix = (themeData, themeColor) => {
 	return ((color.r * 0.299 + color.g * 0.587 + color.b * 0.114) > 175) ? '_dark' : '_light'
 }
 
-export const parseRollNotation = (input, diceAvailable = []) => {
-	const notation = Array.isArray(input)
-		? input
-		: String(input).split(',').map(part => part.trim()).filter(Boolean)
-
-	const parsedNotation = []
-	const diceNotation = /^(\d*)[dD](\d+)(.*)$/i
-	const percentNotation = /^(\d*)[dD](00|%)(.*)$/i
-	const fudgeNotation = /^(\d*)[dD](f+[ate]*)(.*)$/i
-	const customNotation = /^(\d*)[dD]([\d\w]+)([+-]{0,1}\d+)?/i
-	const modifier = /([+-])(\d+)/
-
-	const validNumber = (value, fallback, notationText) => {
-		const number = value === '' ? fallback : Number(value)
-		if (Number.isNaN(number) || !Number.isInteger(number) || number < 1) {
-			throw new Error(`Invalid notation: ${notationText}`)
-		}
-		return number
-	}
-
-	notation.forEach(roll => {
-		if (typeof roll === 'object') {
-			if (!roll.sides) {
-				throw new Error('Roll notation is missing sides')
-			}
-			parsedNotation.push({ qty: 1, modifier: 0, ...roll })
-			return
-		}
-
-		const cleanNotation = String(roll).trim().replace(/\s+/g, '')
-		const match = cleanNotation.match(percentNotation) || cleanNotation.match(diceNotation) || cleanNotation.match(fudgeNotation) || cleanNotation.match(customNotation)
-
-		if (!match || match.length < 3) {
-			throw new Error(`Invalid notation: ${roll}`)
-		}
-
-		let mod = 0
-		if (match[3] && modifier.test(match[3])) {
-			const modParts = match[3].match(modifier)
-			mod = validNumber(modParts[2], 0, roll)
-			if (modParts[1] === '-') {
-				mod *= -1
-			}
-		}
-
-		const returnObj = {
-			qty: validNumber(match[1], 1, roll),
-			modifier: mod,
-			notation: cleanNotation,
-		}
-
-		if (cleanNotation.match(percentNotation)) {
-			returnObj.sides = 'd100'
-			returnObj.data = 'single'
-		} else if (cleanNotation.match(fudgeNotation)) {
-			returnObj.sides = 'fate'
-		} else if (diceAvailable.includes(cleanNotation.match(customNotation)[2])) {
-			returnObj.sides = match[2]
-		} else {
-			returnObj.sides = cleanNotation.match(diceNotation) ? `d${match[2]}` : match[2]
-		}
-
-		parsedNotation.push(returnObj)
-	})
-
-	return parsedNotation
-}
+export const parseRollNotation = (input, diceAvailable = [], options = {}) => (
+	parseRollNotationInput(input, diceAvailable, options).diceGroups
+)
 
 const normalizeDieType = sides => Number.isInteger(sides) ? `d${sides}` : sides
 
@@ -617,7 +562,13 @@ export const simulateRollWithLoaders = async ({
 		getAmmo(),
 		loadThemeData({ theme }),
 	])
-	const parsedNotation = parseRollNotation(notation, themeData.diceAvailable)
+	const parsedRoll = parseRollNotationInput(notation, themeData.diceAvailable, {
+		maxNotationLength: options.maxNotationLength,
+		maxDiceCount: options.maxDiceCount,
+		maxSides: options.maxSides,
+		maxRerollDepth: options.maxRerollDepth,
+	})
+	const parsedNotation = parsedRoll.diceGroups
 	const { groups, rolls, renderDice } = buildRollData({ parsedNotation, themeData, theme, themeColor, delay: options.delay })
 	const physics = createPhysicsContext({ Ammo, themeData, options, random })
 	const stateById = new Map(renderDice.map(die => [
@@ -658,6 +609,7 @@ export const simulateRollWithLoaders = async ({
 	let timedOut = false
 	let rollResults
 	let results
+	let finalResult
 	try {
 	for (let frame = 0; frame < maxFrames; frame++) {
 		while (scheduledDice.length && scheduledDice[0].delayMs <= elapsed) {
@@ -735,6 +687,10 @@ export const simulateRollWithLoaders = async ({
 			rolls: groupRolls.map(({ collectionId, id, meshName, ...roll }) => roll),
 		}
 	})
+	finalResult = computeFinalResult(parsedRoll.parsedTree, results, {
+		originalNotation: parsedRoll.originalNotation || (Array.isArray(notation) ? notation.join(',') : String(notation)),
+		maxRerollDepth: options.maxRerollDepth,
+	})
 	} finally {
 		physics.cleanup()
 	}
@@ -745,7 +701,7 @@ export const simulateRollWithLoaders = async ({
 	return {
 		version: 1,
 		metadata: {
-			notation: Array.isArray(notation) ? notation : String(notation),
+			notation: parsedRoll.originalNotation || (Array.isArray(notation) ? notation.join(',') : String(notation)),
 			generatedAt: new Date().toISOString(),
 			seed: seed === undefined || seed === null || seed === '' ? null : String(seed),
 			theme,
@@ -760,6 +716,7 @@ export const simulateRollWithLoaders = async ({
 				settleTimeout: options.settleTimeout,
 			},
 			results,
+			finalResult,
 			rolls: rollResults,
 			renderDice: renderDice.map(({ delayMs, newStartPoint, ...die }) => die),
 			frame: {

@@ -215,7 +215,7 @@
 					<label>
 						Endpoint
 						<div class="row">
-							<input id="endpoint" value="/api/roll?notation=2d20" spellcheck="false" />
+							<input id="endpoint" value="/api/roll?notation=2d20kh1" spellcheck="false" />
 							<button id="fetch-roll" type="button">Fetch</button>
 						</div>
 					</label>
@@ -259,7 +259,14 @@
 				status.textContent = message
 			}
 
-			const setResults = results => {
+			const setResults = trace => {
+				const metadata = trace?.metadata || {}
+				const results = metadata.results || []
+				if (metadata.finalResult) {
+					const label = metadata.finalResult.notation || metadata.notation || 'Roll'
+					result.textContent = `${label}: ${metadata.finalResult.value}`
+					return
+				}
 				if (!results?.length) {
 					result.textContent = ''
 					return
@@ -281,7 +288,7 @@
 
 			const replayPayload = async () => {
 				const trace = JSON.parse(payload.value)
-				setResults(trace.metadata?.results)
+				setResults(trace)
 				setStatus('Replaying')
 				await diceBox.replay(trace, { speed: Number(speed.value) || 1 })
 				setStatus('Ready')

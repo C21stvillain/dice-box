@@ -1,10 +1,10 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "@3d-dice/dice-box",
       "dependencies": {
+        "@3d-dice/dice-roller-parser": "^0.2.6",
         "@babylonjs/core": "5.57.1",
         "@babylonjs/loaders": "5.57.1",
         "@babylonjs/materials": "5.57.1",
@@ -21,6 +21,8 @@
     },
   },
   "packages": {
+    "@3d-dice/dice-roller-parser": ["@3d-dice/dice-roller-parser@0.2.6", "", {}, "sha512-9dMSX0bqKZ5BQ+HABE4c4ZY1/VPUqtQd+gXKAHPMcFbY3cCMOPy327ZQ/LHdptS7VNZCGPriybIQrg7efYIQEw=="],
+
     "@babylonjs/core": ["@babylonjs/core@5.57.1", "", {}, "sha512-k8U+SFPVGvHgeNr651nxZL26iVCmTzjmRrdbQa0BGas+lg8PIV/tfhN4uTeWWQeRFLvjbkcHA5qD8x/Xk3EpMQ=="],
 
     "@babylonjs/loaders": ["@babylonjs/loaders@5.57.1", "", { "peerDependencies": { "@babylonjs/core": "^5.22.0", "babylonjs-gltf2interface": "^5.22.0" } }, "sha512-DHk0iOwJgnTcj8vI+cQVzpiUvWGJvYqWyZxsf7nzhbeND+ZwNWSG0AelaGbGHpWTaDSd/DjUcoWVZuT4Cg6/Xg=="],

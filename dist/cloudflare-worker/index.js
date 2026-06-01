@@ -1,5 +1,833 @@
+var __create = Object.create;
 var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+var __commonJS = (cb, mod) => function __require() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+
+// node_modules/@3d-dice/dice-roller-parser/dist/index.js
+var require_dist = __commonJS({
+  "node_modules/@3d-dice/dice-roller-parser/dist/index.js"(exports, module) {
+    !(function(e, r) {
+      if ("object" == typeof exports && "object" == typeof module) module.exports = r();
+      else if ("function" == typeof define && define.amd) define([], r);
+      else {
+        var t = r();
+        for (var l in t) ("object" == typeof exports ? exports : e)[l] = t[l];
+      }
+    })(exports, (() => (() => {
+      "use strict";
+      var e = { 95: (e2, r2, t) => {
+        Object.defineProperty(r2, "__esModule", { value: true }), r2.DiceRoller = void 0;
+        const l = t(51);
+        r2.DiceRoller = class {
+          constructor(e3, r3 = 1e3) {
+            this.randFunction = Math.random, this.maxRollCount = 1e3, e3 && (this.randFunction = e3), this.maxRollCount = r3;
+          }
+          parse(e3) {
+            return l.parse(e3);
+          }
+          roll(e3) {
+            const r3 = l.parse(e3);
+            return this.rollType(r3);
+          }
+          rollValue(e3) {
+            return this.roll(e3).value;
+          }
+          rollParsed(e3) {
+            return this.rollType(e3);
+          }
+          rollType(e3) {
+            let r3;
+            switch (e3.type) {
+              case "diceExpression":
+                r3 = this.rollDiceExpr(e3);
+                break;
+              case "group":
+                r3 = this.rollGroup(e3);
+                break;
+              case "die":
+                r3 = this.rollDie(e3);
+                break;
+              case "expression":
+                r3 = this.rollExpression(e3);
+                break;
+              case "mathfunction":
+                r3 = this.rollFunction(e3);
+                break;
+              case "inline":
+                r3 = this.rollType(e3.expr);
+                break;
+              case "number":
+                r3 = Object.assign(Object.assign({}, e3), { success: null, successes: 0, failures: 0, valid: true, order: 0 });
+                break;
+              default:
+                throw new Error(`Unable to render ${e3.type}`);
+            }
+            return e3.label && (r3.label = e3.label), r3;
+          }
+          rollDiceExpr(e3) {
+            const r3 = this.rollType(e3.head), t2 = [r3], l2 = [], o = e3.ops.reduce(((e4, r4, o2) => {
+              const s = this.rollType(r4.tail);
+              switch (s.order = o2, t2.push(s), l2.push(r4.op), r4.op) {
+                case "+":
+                  return e4 + s.value;
+                case "-":
+                  return e4 - s.value;
+                default:
+                  return e4;
+              }
+            }), r3.value);
+            return { dice: t2, ops: l2, success: null, successes: 0, failures: 0, type: "diceexpressionroll", valid: true, value: o, order: 0 };
+          }
+          rollGroup(e3) {
+            let r3 = e3.rolls.map(((e4, r4) => Object.assign(Object.assign({}, this.rollType(e4)), { order: r4 }))), t2 = 0, l2 = 0, o = false;
+            if (e3.mods) {
+              const s2 = e3.mods, n = /* @__PURE__ */ __name((e4) => (o = s2.some(((e5) => ["failure", "success"].includes(e5.type))), e4 = s2.reduce(((e5, r4) => this.applyGroupMod(e5, r4)), e4), o && (e4 = e4.map(((e5) => (t2 += e5.successes, l2 += e5.failures, e5.value = e5.successes - e5.failures, e5.success = e5.value > 0, e5)))), e4), "n");
+              if (1 === r3.length && ["die", "diceexpressionroll"].includes(r3[0].type)) {
+                const e4 = r3[0];
+                let t3 = "die" === e4.type ? e4.rolls : e4.dice.filter(((e5) => "number" !== e5.type)).reduce(((e5, r4) => [...e5, ..."die" === r4.type ? r4.rolls : r4.dice]), []);
+                t3 = n(t3), e4.value = t3.reduce(((e5, r4) => r4.valid ? e5 + r4.value : e5), 0);
+              } else r3 = n(r3);
+            }
+            const s = r3.reduce(((e4, r4) => r4.valid ? e4 + r4.value : e4), 0);
+            return { dice: r3, success: o ? s > 0 : null, successes: t2, failures: l2, type: "grouproll", valid: true, value: s, order: 0 };
+          }
+          rollDie(e3) {
+            const r3 = this.rollType(e3.count);
+            if (r3.value > this.maxRollCount) throw new Error("Entered number of dice too large.");
+            let t2, l2;
+            "fate" === e3.die.type ? (l2 = { type: "fate", success: null, successes: 0, failures: 0, valid: false, value: 0, order: 0 }, t2 = Array.from({ length: r3.value }, ((e4, r4) => this.generateFateRoll(r4)))) : (l2 = this.rollType(e3.die), t2 = Array.from({ length: r3.value }, ((e4, r4) => this.generateDiceRoll(l2.value, r4)))), e3.mods && (t2 = e3.mods.reduce(((e4, r4) => this.applyMod(e4, r4)), t2));
+            let o = 0, s = 0;
+            e3.targets && (t2 = e3.targets.reduce(((e4, r4) => this.applyMod(e4, r4)), t2).map(((e4) => (o += e4.successes, s += e4.failures, e4.value = e4.successes - e4.failures, e4.success = e4.value > 0, e4))));
+            let n = false, u = 0;
+            if (e3.match) {
+              const r4 = e3.match, l3 = t2.reduce(((e4, r5) => e4.set(r5.roll, (e4.get(r5.roll) || 0) + 1)), /* @__PURE__ */ new Map()), o2 = new Set(Array.from(l3.entries()).filter((([e4, t3]) => t3 >= r4.min.value)).filter((([e4]) => !(r4.mod && r4.expr) || this.successTest(r4.mod, this.rollType(r4.expr).value, e4))).map((([e4]) => e4)));
+              t2.filter(((e4) => o2.has(e4.roll))).forEach(((e4) => e4.matched = true)), r4.count && (n = true, u = o2.size);
+            }
+            e3.sort && (t2 = this.applySort(t2, e3.sort));
+            const a = t2.reduce(((e4, r4) => r4.valid ? e4 + r4.value : e4), 0);
+            return { count: r3, die: l2, rolls: t2, success: e3.targets ? a > 0 : null, successes: o, failures: s, type: "die", valid: true, value: n ? u : a, order: 0, matched: n };
+          }
+          rollExpression(e3) {
+            const r3 = this.rollType(e3.head), t2 = [r3], l2 = [], o = e3.ops.reduce(((e4, r4) => {
+              const o2 = this.rollType(r4.tail);
+              switch (t2.push(o2), l2.push(r4.op), r4.op) {
+                case "+":
+                  return e4 + o2.value;
+                case "-":
+                  return e4 - o2.value;
+                case "*":
+                  return e4 * o2.value;
+                case "/":
+                  return e4 / o2.value;
+                case "%":
+                  return e4 % o2.value;
+                case "**":
+                  return e4 ** o2.value;
+                default:
+                  return e4;
+              }
+            }), r3.value);
+            return { dice: t2, ops: l2, success: null, successes: 0, failures: 0, type: "expressionroll", valid: true, value: o, order: 0 };
+          }
+          rollFunction(e3) {
+            const r3 = this.rollType(e3.expr);
+            let t2;
+            switch (e3.op) {
+              case "floor":
+                t2 = Math.floor(r3.value);
+                break;
+              case "ceil":
+                t2 = Math.ceil(r3.value);
+                break;
+              case "round":
+                t2 = Math.round(r3.value);
+                break;
+              case "abs":
+                t2 = Math.abs(r3.value);
+                break;
+              default:
+                t2 = r3.value;
+            }
+            return { expr: r3, op: e3.op, success: null, successes: 0, failures: 0, type: "mathfunction", valid: true, value: t2, order: 0 };
+          }
+          applyGroupMod(e3, r3) {
+            return this.getGroupModMethod(r3)(e3);
+          }
+          getGroupModMethod(e3) {
+            const r3 = /* @__PURE__ */ __name((e4) => e4.value, "r");
+            switch (e3.type) {
+              case "success":
+                return this.getSuccessMethod(e3, r3);
+              case "failure":
+                return this.getFailureMethod(e3, r3);
+              case "keep":
+                return this.getKeepMethod(e3, r3);
+              case "drop":
+                return this.getDropMethod(e3, r3);
+              default:
+                throw new Error(`Mod ${e3.type} is not recognised`);
+            }
+          }
+          applyMod(e3, r3) {
+            return this.getModMethod(r3)(e3);
+          }
+          getModMethod(e3) {
+            const r3 = /* @__PURE__ */ __name((e4) => e4.roll, "r");
+            switch (e3.type) {
+              case "success":
+                return this.getSuccessMethod(e3, r3);
+              case "failure":
+                return this.getFailureMethod(e3, r3);
+              case "crit":
+                return this.getCritSuccessMethod(e3, r3);
+              case "critfail":
+                return this.getCritFailureMethod(e3, r3);
+              case "keep":
+                return (t2) => this.getKeepMethod(e3, r3)(t2).sort(((e4, r4) => e4.order - r4.order));
+              case "drop":
+                return (t2) => this.getDropMethod(e3, r3)(t2).sort(((e4, r4) => e4.order - r4.order));
+              case "explode":
+                return this.getExplodeMethod(e3);
+              case "compound":
+                return this.getCompoundMethod(e3);
+              case "penetrate":
+                return this.getPenetrateMethod(e3);
+              case "reroll":
+                return this.getReRollMethod(e3);
+              case "rerollOnce":
+                return this.getReRollOnceMethod(e3);
+              default:
+                throw new Error(`Mod ${e3.type} is not recognised`);
+            }
+          }
+          applySort(e3, r3) {
+            return e3.sort(((e4, t2) => r3.asc ? e4.roll - t2.roll : t2.roll - e4.roll)), e3.forEach(((e4, r4) => e4.order = r4)), e3;
+          }
+          getCritSuccessMethod(e3, r3) {
+            const t2 = this.rollType(e3.expr);
+            return (l2) => l2.map(((l3) => {
+              if (!l3.valid) return l3;
+              if ("roll" !== l3.type) return l3;
+              if (l3.success) return l3;
+              const o = l3;
+              return this.successTest(e3.mod, t2.value, r3(l3)) ? o.critical = "success" : "success" === o.critical && (o.critical = null), l3;
+            }));
+          }
+          getCritFailureMethod(e3, r3) {
+            const t2 = this.rollType(e3.expr);
+            return (l2) => l2.map(((l3) => {
+              if (!l3.valid) return l3;
+              if ("roll" !== l3.type) return l3;
+              if (l3.success) return l3;
+              const o = l3;
+              return this.successTest(e3.mod, t2.value, r3(l3)) ? o.critical = "failure" : "failure" === o.critical && (o.critical = null), l3;
+            }));
+          }
+          getSuccessMethod(e3, r3) {
+            const t2 = this.rollType(e3.expr);
+            return (l2) => l2.map(((l3) => l3.valid ? (this.successTest(e3.mod, t2.value, r3(l3)) && (l3.successes += 1), l3) : l3));
+          }
+          getFailureMethod(e3, r3) {
+            const t2 = this.rollType(e3.expr);
+            return (l2) => l2.map(((l3) => l3.valid ? (this.successTest(e3.mod, t2.value, r3(l3)) && (l3.failures += 1), l3) : l3));
+          }
+          getKeepMethod(e3, r3) {
+            const t2 = this.rollType(e3.expr);
+            return (l2) => {
+              if (0 === l2.length) return l2;
+              l2 = l2.sort(((t3, l3) => "l" === e3.highlow ? r3(l3) - r3(t3) : r3(t3) - r3(l3))).sort(((e4, r4) => (e4.valid ? 1 : 0) - (r4.valid ? 1 : 0)));
+              const o = Math.max(Math.min(t2.value, l2.length), 0);
+              let s = 0, n = 0;
+              const u = l2.reduce(((e4, r4) => (r4.valid ? 1 : 0) + e4), 0) - o;
+              for (; n < l2.length && s < u; ) l2[n].valid && (l2[n].valid = false, l2[n].drop = true, s++), n++;
+              return l2;
+            };
+          }
+          getDropMethod(e3, r3) {
+            const t2 = this.rollType(e3.expr);
+            return (l2) => {
+              l2 = l2.sort(((t3, l3) => "h" === e3.highlow ? r3(l3) - r3(t3) : r3(t3) - r3(l3)));
+              const o = Math.max(Math.min(t2.value, l2.length), 0);
+              let s = 0, n = 0;
+              for (; n < l2.length && s < o; ) l2[n].valid && (l2[n].valid = false, l2[n].drop = true, s++), n++;
+              return l2;
+            };
+          }
+          getExplodeMethod(e3) {
+            const r3 = e3.target ? this.rollType(e3.target.value) : null;
+            return (t2) => {
+              const l2 = r3 ? (t3) => this.successTest(e3.target.mod, r3.value, t3.roll) : (e4) => this.successTest("=", "fateroll" === e4.type ? 1 : e4.die, e4.roll);
+              if ("roll" === t2[0].type && l2({ roll: 1 }) && l2({ roll: t2[0].die })) throw new Error("Invalid reroll target");
+              for (let e4 = 0; e4 < t2.length; e4++) {
+                let r4 = t2[e4];
+                r4.order = e4;
+                let o = 0;
+                for (; l2(r4) && o++ < 1e3; ) {
+                  r4.explode = true;
+                  const l3 = this.reRoll(r4, ++e4);
+                  t2.splice(e4, 0, l3), r4 = l3;
+                }
+              }
+              return t2;
+            };
+          }
+          getCompoundMethod(e3) {
+            const r3 = e3.target ? this.rollType(e3.target.value) : null;
+            return (t2) => {
+              const l2 = r3 ? (t3) => this.successTest(e3.target.mod, r3.value, t3.roll) : (e4) => this.successTest("=", "fateroll" === e4.type ? 1 : e4.die, e4.roll);
+              if ("roll" === t2[0].type && l2({ roll: 1 }) && l2({ roll: t2[0].die })) throw new Error("Invalid reroll target");
+              for (let e4 = 0; e4 < t2.length; e4++) {
+                let r4 = t2[e4], o = r4.roll, s = 0;
+                for (; l2(r4) && s++ < 1e3; ) {
+                  r4.explode = true;
+                  const t3 = this.reRoll(r4, e4 + 1);
+                  o += t3.roll, r4 = t3;
+                }
+                t2[e4].value = o, t2[e4].roll = o;
+              }
+              return t2;
+            };
+          }
+          getPenetrateMethod(e3) {
+            const r3 = e3.target ? this.rollType(e3.target.value) : null;
+            return (t2) => {
+              const l2 = r3 ? (t3) => this.successTest(e3.target.mod, r3.value, t3.roll) : (e4) => this.successTest("=", "fateroll" === e4.type ? 1 : e4.die, e4.roll);
+              if (r3 && "roll" === t2[0].type && l2(t2[0]) && this.successTest(e3.target.mod, r3.value, 1)) throw new Error("Invalid reroll target");
+              for (let e4 = 0; e4 < t2.length; e4++) {
+                let r4 = t2[e4];
+                r4.order = e4;
+                let o = 0;
+                for (; l2(r4) && o++ < 1e3; ) {
+                  r4.explode = true;
+                  const l3 = this.reRoll(r4, ++e4);
+                  l3.value -= 1, t2.splice(e4, 0, l3), r4 = l3;
+                }
+              }
+              return t2;
+            };
+          }
+          getReRollMethod(e3) {
+            const r3 = e3.target ? this.successTest.bind(null, e3.target.mod, this.rollType(e3.target.value).value) : this.successTest.bind(null, "=", 1);
+            return (e4) => {
+              if ("roll" === e4[0].type && r3(1) && r3(e4[0].die)) throw new Error("Invalid reroll target");
+              for (let t2 = 0; t2 < e4.length; t2++) for (; r3(e4[t2].roll); ) {
+                e4[t2].reroll = true, e4[t2].valid = false;
+                const r4 = this.reRoll(e4[t2], t2 + 1);
+                e4.splice(++t2, 0, r4);
+              }
+              return e4;
+            };
+          }
+          getReRollOnceMethod(e3) {
+            const r3 = e3.target ? this.successTest.bind(null, e3.target.mod, this.rollType(e3.target.value).value) : this.successTest.bind(null, "=", 1);
+            return (e4) => {
+              if ("roll" === e4[0].type && r3(1) && r3(e4[0].die)) throw new Error("Invalid reroll target");
+              for (let t2 = 0; t2 < e4.length; t2++) if (r3(e4[t2].roll)) {
+                e4[t2].reroll = true, e4[t2].valid = false;
+                const r4 = this.reRoll(e4[t2], t2 + 1);
+                e4.splice(++t2, 0, r4);
+              }
+              return e4;
+            };
+          }
+          successTest(e3, r3, t2) {
+            switch (e3) {
+              case ">":
+                return t2 >= r3;
+              case "<":
+                return t2 <= r3;
+              default:
+                return t2 == r3;
+            }
+          }
+          reRoll(e3, r3) {
+            switch (e3.type) {
+              case "roll":
+                return this.generateDiceRoll(e3.die, r3);
+              case "fateroll":
+                return this.generateFateRoll(r3);
+              default:
+                throw new Error(`Cannot do a reroll of a ${e3.type}.`);
+            }
+          }
+          generateDiceRoll(e3, r3) {
+            const t2 = parseInt((this.randFunction() * e3).toFixed(), 10) + 1;
+            return { critical: t2 === e3 ? "success" : 1 === t2 ? "failure" : null, die: e3, matched: false, order: r3, roll: t2, success: null, successes: 0, failures: 0, type: "roll", valid: true, value: t2 };
+          }
+          generateFateRoll(e3) {
+            const r3 = Math.floor(3 * this.randFunction()) - 1;
+            return { matched: false, order: e3, roll: r3, success: null, successes: 0, failures: 0, type: "fateroll", valid: true, value: r3 };
+          }
+        };
+      }, 619: (e2, r2) => {
+        Object.defineProperty(r2, "__esModule", { value: true }), r2.DiscordRollRenderer = void 0, r2.DiscordRollRenderer = class {
+          render(e3) {
+            return this.doRender(e3, true);
+          }
+          doRender(e3, r3 = false) {
+            let t = "";
+            switch (e3.type) {
+              case "diceexpressionroll":
+                t = this.renderGroupExpr(e3);
+                break;
+              case "grouproll":
+                t = this.renderGroup(e3);
+                break;
+              case "die":
+                t = this.renderDie(e3);
+                break;
+              case "expressionroll":
+                t = this.renderExpression(e3);
+                break;
+              case "mathfunction":
+                t = this.renderFunction(e3);
+                break;
+              case "roll":
+                return this.renderRoll(e3);
+              case "fateroll":
+                return this.renderFateRoll(e3);
+              case "number":
+                const r4 = e3.label ? ` (${e3.label})` : "";
+                return `${e3.value}${r4}`;
+              case "fate":
+                return "F";
+              default:
+                throw new Error("Unable to render");
+            }
+            return e3.valid || (t = "~~" + t.replace(/~~/g, "") + "~~"), r3 ? this.stripBrackets(t) : e3.label ? `(${e3.label}: ${t})` : t;
+          }
+          renderGroup(e3) {
+            const r3 = [];
+            for (const t of e3.dice) r3.push(this.doRender(t));
+            return r3.length > 1 ? `{ ${r3.join(" + ")} } = ${e3.value}` : `{ ${this.stripBrackets(r3[0])} } = ${e3.value}`;
+          }
+          renderGroupExpr(e3) {
+            const r3 = [];
+            for (const t of e3.dice) r3.push(this.doRender(t));
+            return r3.length > 1 ? `(${r3.join(" + ")} = ${e3.value})` : r3[0];
+          }
+          renderDie(e3) {
+            const r3 = [];
+            for (const t2 of e3.rolls) r3.push(this.doRender(t2));
+            let t = `${r3.join(", ")}`;
+            ["number", "fate"].includes(e3.die.type) && "number" === e3.count.type || (t += `[*Rolling: ${this.doRender(e3.count)}d${this.doRender(e3.die)}*]`);
+            const l = e3.matched ? " Match" + (1 === e3.value ? "" : "es") : "";
+            return t += ` = ${e3.value}${l}`, `(${t})`;
+          }
+          renderExpression(e3) {
+            if (e3.dice.length > 1) {
+              const r3 = [];
+              for (let t = 0; t < e3.dice.length - 1; t++) r3.push(this.doRender(e3.dice[t])), r3.push(e3.ops[t]);
+              return r3.push(this.doRender(e3.dice.slice(-1)[0])), r3.push("="), r3.push(e3.value + ""), `(${r3.join(" ")})`;
+            }
+            return "number" === e3.dice[0].type ? e3.value + "" : this.doRender(e3.dice[0]);
+          }
+          renderFunction(e3) {
+            const r3 = this.doRender(e3.expr);
+            return `(${e3.op}${this.addBrackets(r3)} = ${e3.value})`;
+          }
+          addBrackets(e3) {
+            return e3.startsWith("(") || (e3 = `(${e3}`), e3.endsWith(")") || (e3 = `${e3})`), e3;
+          }
+          stripBrackets(e3) {
+            return e3.startsWith("(") && (e3 = e3.substring(1)), e3.endsWith(")") && (e3 = e3.substring(0, e3.length - 1)), e3;
+          }
+          renderRoll(e3) {
+            let r3 = `${e3.roll}`;
+            return e3.valid ? e3.success && 1 === e3.value ? r3 = `**${e3.roll}**` : e3.success && -1 === e3.value ? r3 = `*${e3.roll}*` : e3.success || "success" !== e3.critical ? e3.success || "failure" !== e3.critical || (r3 = `*${e3.roll}*`) : r3 = `**${e3.roll}**` : r3 = `~~${e3.roll}~~`, e3.matched && (r3 = `__${r3}__`), r3;
+          }
+          renderFateRoll(e3) {
+            const r3 = 0 === e3.roll ? "0" : e3.roll > 0 ? "+" : "-";
+            let t = `${e3.roll}`;
+            return e3.valid ? e3.success && 1 === e3.value ? t = `**${r3}**` : e3.success && -1 === e3.value && (t = `*${r3}*`) : t = `~~${r3}~~`, e3.matched && (t = `__${t}__`), t;
+          }
+        };
+      }, 607: function(e2, r2, t) {
+        var l = this && this.__createBinding || (Object.create ? function(e3, r3, t2, l2) {
+          void 0 === l2 && (l2 = t2);
+          var o2 = Object.getOwnPropertyDescriptor(r3, t2);
+          o2 && !("get" in o2 ? !r3.__esModule : o2.writable || o2.configurable) || (o2 = { enumerable: true, get: /* @__PURE__ */ __name(function() {
+            return r3[t2];
+          }, "get") }), Object.defineProperty(e3, l2, o2);
+        } : function(e3, r3, t2, l2) {
+          void 0 === l2 && (l2 = t2), e3[l2] = r3[t2];
+        }), o = this && this.__exportStar || function(e3, r3) {
+          for (var t2 in e3) "default" === t2 || Object.prototype.hasOwnProperty.call(r3, t2) || l(r3, e3, t2);
+        };
+        Object.defineProperty(r2, "__esModule", { value: true }), o(t(95), r2), o(t(604), r2), o(t(234), r2), o(t(619), r2), o(t(54), r2);
+      }, 604: (e2, r2) => {
+        Object.defineProperty(r2, "__esModule", { value: true });
+      }, 234: (e2, r2) => {
+        Object.defineProperty(r2, "__esModule", { value: true });
+      }, 54: (e2, r2) => {
+        Object.defineProperty(r2, "__esModule", { value: true });
+      }, 51: (e2) => {
+        function r2(e3, t, l, o) {
+          this.message = e3, this.expected = t, this.found = l, this.location = o, this.name = "SyntaxError", "function" == typeof Error.captureStackTrace && Error.captureStackTrace(this, r2);
+        }
+        __name(r2, "r");
+        !(function(e3, r3) {
+          function t() {
+            this.constructor = e3;
+          }
+          __name(t, "t");
+          t.prototype = r3.prototype, e3.prototype = new t();
+        })(r2, Error), r2.buildMessage = function(e3, r3) {
+          var t = { literal: /* @__PURE__ */ __name(function(e4) {
+            return '"' + o(e4.text) + '"';
+          }, "literal"), class: /* @__PURE__ */ __name(function(e4) {
+            var r4, t2 = "";
+            for (r4 = 0; r4 < e4.parts.length; r4++) t2 += e4.parts[r4] instanceof Array ? s(e4.parts[r4][0]) + "-" + s(e4.parts[r4][1]) : s(e4.parts[r4]);
+            return "[" + (e4.inverted ? "^" : "") + t2 + "]";
+          }, "class"), any: /* @__PURE__ */ __name(function(e4) {
+            return "any character";
+          }, "any"), end: /* @__PURE__ */ __name(function(e4) {
+            return "end of input";
+          }, "end"), other: /* @__PURE__ */ __name(function(e4) {
+            return e4.description;
+          }, "other") };
+          function l(e4) {
+            return e4.charCodeAt(0).toString(16).toUpperCase();
+          }
+          __name(l, "l");
+          function o(e4) {
+            return e4.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\0/g, "\\0").replace(/\t/g, "\\t").replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/[\x00-\x0F]/g, (function(e5) {
+              return "\\x0" + l(e5);
+            })).replace(/[\x10-\x1F\x7F-\x9F]/g, (function(e5) {
+              return "\\x" + l(e5);
+            }));
+          }
+          __name(o, "o");
+          function s(e4) {
+            return e4.replace(/\\/g, "\\\\").replace(/\]/g, "\\]").replace(/\^/g, "\\^").replace(/-/g, "\\-").replace(/\0/g, "\\0").replace(/\t/g, "\\t").replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/[\x00-\x0F]/g, (function(e5) {
+              return "\\x0" + l(e5);
+            })).replace(/[\x10-\x1F\x7F-\x9F]/g, (function(e5) {
+              return "\\x" + l(e5);
+            }));
+          }
+          __name(s, "s");
+          return "Expected " + (function(e4) {
+            var r4, l2, o2, s2 = new Array(e4.length);
+            for (r4 = 0; r4 < e4.length; r4++) s2[r4] = (o2 = e4[r4], t[o2.type](o2));
+            if (s2.sort(), s2.length > 0) {
+              for (r4 = 1, l2 = 1; r4 < s2.length; r4++) s2[r4 - 1] !== s2[r4] && (s2[l2] = s2[r4], l2++);
+              s2.length = l2;
+            }
+            switch (s2.length) {
+              case 1:
+                return s2[0];
+              case 2:
+                return s2[0] + " or " + s2[1];
+              default:
+                return s2.slice(0, -1).join(", ") + ", or " + s2[s2.length - 1];
+            }
+          })(e3) + " but " + (function(e4) {
+            return e4 ? '"' + o(e4) + '"' : "end of input";
+          })(r3) + " found.";
+        }, e2.exports = { SyntaxError: r2, parse: /* @__PURE__ */ __name(function(e3, t) {
+          t = void 0 !== t ? t : {};
+          var l, o = {}, s = { start: Me }, n = Me, u = { type: "any" }, a = ye("[[", false), c = ye("]]", false), i = /* @__PURE__ */ __name(function(e4, r3) {
+            return r3 && (e4.label = r3), e4;
+          }, "i"), d = ">", h = ye(">", false), p = "<", f = ye("<", false), v = "=", g = ye("=", false), y = ye("f", false), m = ye("cs", false), b = ye("cf", false), x = ye("m", false), A = ye("t", false), C = ye("k", false), M = ye("l", false), R = ye("h", false), w = ye("d", false), T = ye("{", false), $ = ye(",", false), E = ye("}", false), F = "+", k = ye("+", false), _ = ye("s", false), j = ye("a", false), O = ye("!", false), D = ye("!!", false), S = ye("!p", false), P = ye("r", false), G = ye("ro", false), I = ye("F", false), B = ye("%", false), W = ye("(", false), K = ye(")", false), U = ye("-", false), z = /* @__PURE__ */ __name(function(e4, r3) {
+            return 0 == r3.length ? e4 : { head: e4, type: "expression", ops: r3.map(((e5) => ({ type: "math", op: e5[1], tail: e5[3] }))) };
+          }, "z"), V = ye("*", false), q = ye("/", false), H = "**", J = ye("**", false), L = "floor", N = ye("floor", false), Q = "ceil", X = ye("ceil", false), Y = "round", Z = ye("round", false), ee = ye("abs", false), re = be("integer"), te = /^[0-9]/, le = me([["0", "9"]], false, false), oe = ye("[", false), se = /^[^\]]/, ne = me(["]"], true, false), ue = ye("]", false), ae = be("whitespace"), ce = /^[ \t\n\r]/, ie = me([" ", "	", "\n", "\r"], false, false), de = 0, he = 0, pe = [{ line: 1, column: 1 }], fe = 0, ve = [], ge = 0;
+          if ("startRule" in t) {
+            if (!(t.startRule in s)) throw new Error(`Can't start parsing from rule "` + t.startRule + '".');
+            n = s[t.startRule];
+          }
+          function ye(e4, r3) {
+            return { type: "literal", text: e4, ignoreCase: r3 };
+          }
+          __name(ye, "ye");
+          function me(e4, r3, t2) {
+            return { type: "class", parts: e4, inverted: r3, ignoreCase: t2 };
+          }
+          __name(me, "me");
+          function be(e4) {
+            return { type: "other", description: e4 };
+          }
+          __name(be, "be");
+          function xe(r3) {
+            var t2, l2 = pe[r3];
+            if (l2) return l2;
+            for (t2 = r3 - 1; !pe[t2]; ) t2--;
+            for (l2 = { line: (l2 = pe[t2]).line, column: l2.column }; t2 < r3; ) 10 === e3.charCodeAt(t2) ? (l2.line++, l2.column = 1) : l2.column++, t2++;
+            return pe[r3] = l2, l2;
+          }
+          __name(xe, "xe");
+          function Ae(e4, r3) {
+            var t2 = xe(e4), l2 = xe(r3);
+            return { start: { offset: e4, line: t2.line, column: t2.column }, end: { offset: r3, line: l2.line, column: l2.column } };
+          }
+          __name(Ae, "Ae");
+          function Ce(e4) {
+            de < fe || (de > fe && (fe = de, ve = []), ve.push(e4));
+          }
+          __name(Ce, "Ce");
+          function Me() {
+            var r3, t2, l2, s2, n2, a2;
+            if (r3 = de, (t2 = We()) !== o) {
+              for (l2 = [], e3.length > de ? (s2 = e3.charAt(de), de++) : (s2 = o, 0 === ge && Ce(u)); s2 !== o; ) l2.push(s2), e3.length > de ? (s2 = e3.charAt(de), de++) : (s2 = o, 0 === ge && Ce(u));
+              l2 !== o ? (he = r3, a2 = l2, (n2 = t2).root = true, a2 && (n2.label = a2.join("")), r3 = t2 = n2) : (de = r3, r3 = o);
+            } else de = r3, r3 = o;
+            return r3;
+          }
+          __name(Me, "Me");
+          function Re() {
+            var r3, t2, l2;
+            return r3 = de, 62 === e3.charCodeAt(de) ? (t2 = d, de++) : (t2 = o, 0 === ge && Ce(h)), t2 === o && (60 === e3.charCodeAt(de) ? (t2 = p, de++) : (t2 = o, 0 === ge && Ce(f)), t2 === o && (61 === e3.charCodeAt(de) ? (t2 = v, de++) : (t2 = o, 0 === ge && Ce(g)))), t2 !== o && (l2 = Be()) !== o ? (he = r3, r3 = t2 = { type: "success", mod: t2, expr: l2 }) : (de = r3, r3 = o), r3;
+          }
+          __name(Re, "Re");
+          function we() {
+            var r3, t2, l2, s2;
+            return r3 = de, 102 === e3.charCodeAt(de) ? (t2 = "f", de++) : (t2 = o, 0 === ge && Ce(y)), t2 !== o ? (62 === e3.charCodeAt(de) ? (l2 = d, de++) : (l2 = o, 0 === ge && Ce(h)), l2 === o && (60 === e3.charCodeAt(de) ? (l2 = p, de++) : (l2 = o, 0 === ge && Ce(f)), l2 === o && (61 === e3.charCodeAt(de) ? (l2 = v, de++) : (l2 = o, 0 === ge && Ce(g)))), l2 === o && (l2 = null), l2 !== o && (s2 = Be()) !== o ? (he = r3, r3 = t2 = { type: "failure", mod: l2, expr: s2 }) : (de = r3, r3 = o)) : (de = r3, r3 = o), r3;
+          }
+          __name(we, "we");
+          function Te() {
+            var r3, t2, l2, s2;
+            return r3 = de, "cs" === e3.substr(de, 2) ? (t2 = "cs", de += 2) : (t2 = o, 0 === ge && Ce(m)), t2 !== o ? (62 === e3.charCodeAt(de) ? (l2 = d, de++) : (l2 = o, 0 === ge && Ce(h)), l2 === o && (60 === e3.charCodeAt(de) ? (l2 = p, de++) : (l2 = o, 0 === ge && Ce(f)), l2 === o && (61 === e3.charCodeAt(de) ? (l2 = v, de++) : (l2 = o, 0 === ge && Ce(g)))), l2 === o && (l2 = null), l2 !== o && (s2 = Be()) !== o ? (he = r3, r3 = t2 = { type: "crit", mod: l2, expr: s2 }) : (de = r3, r3 = o)) : (de = r3, r3 = o), r3;
+          }
+          __name(Te, "Te");
+          function $e() {
+            var r3, t2, l2, s2;
+            return r3 = de, "cf" === e3.substr(de, 2) ? (t2 = "cf", de += 2) : (t2 = o, 0 === ge && Ce(b)), t2 !== o ? (62 === e3.charCodeAt(de) ? (l2 = d, de++) : (l2 = o, 0 === ge && Ce(h)), l2 === o && (60 === e3.charCodeAt(de) ? (l2 = p, de++) : (l2 = o, 0 === ge && Ce(f)), l2 === o && (61 === e3.charCodeAt(de) ? (l2 = v, de++) : (l2 = o, 0 === ge && Ce(g)))), l2 === o && (l2 = null), l2 !== o && (s2 = Be()) !== o ? (he = r3, r3 = t2 = { type: "critfail", mod: l2, expr: s2 }) : (de = r3, r3 = o)) : (de = r3, r3 = o), r3;
+          }
+          __name($e, "$e");
+          function Ee() {
+            var r3, t2, l2, s2;
+            return r3 = de, 107 === e3.charCodeAt(de) ? (t2 = "k", de++) : (t2 = o, 0 === ge && Ce(C)), t2 !== o ? (108 === e3.charCodeAt(de) ? (l2 = "l", de++) : (l2 = o, 0 === ge && Ce(M)), l2 === o && (104 === e3.charCodeAt(de) ? (l2 = "h", de++) : (l2 = o, 0 === ge && Ce(R))), l2 === o && (l2 = null), l2 !== o ? ((s2 = Be()) === o && (s2 = null), s2 !== o ? (he = r3, r3 = t2 = { type: "keep", highlow: l2, expr: s2 || Qe }) : (de = r3, r3 = o)) : (de = r3, r3 = o)) : (de = r3, r3 = o), r3;
+          }
+          __name(Ee, "Ee");
+          function Fe() {
+            var r3, t2, l2, s2;
+            return r3 = de, 100 === e3.charCodeAt(de) ? (t2 = "d", de++) : (t2 = o, 0 === ge && Ce(w)), t2 !== o ? (108 === e3.charCodeAt(de) ? (l2 = "l", de++) : (l2 = o, 0 === ge && Ce(M)), l2 === o && (104 === e3.charCodeAt(de) ? (l2 = "h", de++) : (l2 = o, 0 === ge && Ce(R))), l2 === o && (l2 = null), l2 !== o ? ((s2 = Be()) === o && (s2 = null), s2 !== o ? (he = r3, r3 = t2 = { type: "drop", highlow: l2, expr: s2 || Qe }) : (de = r3, r3 = o)) : (de = r3, r3 = o)) : (de = r3, r3 = o), r3;
+          }
+          __name(Fe, "Fe");
+          function ke() {
+            var r3, t2, l2, s2, n2, u2, a2, c2, i2, d2;
+            if (r3 = de, (t2 = _e()) !== o) {
+              for (l2 = [], s2 = de, (n2 = Le()) !== o ? (43 === e3.charCodeAt(de) ? (u2 = F, de++) : (u2 = o, 0 === ge && Ce(k)), u2 !== o && (a2 = Le()) !== o && (c2 = _e()) !== o ? s2 = n2 = [n2, u2, a2, c2] : (de = s2, s2 = o)) : (de = s2, s2 = o); s2 !== o; ) l2.push(s2), s2 = de, (n2 = Le()) !== o ? (43 === e3.charCodeAt(de) ? (u2 = F, de++) : (u2 = o, 0 === ge && Ce(k)), u2 !== o && (a2 = Le()) !== o && (c2 = _e()) !== o ? s2 = n2 = [n2, u2, a2, c2] : (de = s2, s2 = o)) : (de = s2, s2 = o);
+              l2 !== o ? (he = r3, i2 = t2, r3 = t2 = 0 == (d2 = l2).length ? i2 : { head: i2, type: "diceExpression", ops: d2.map(((e4) => ({ type: "math", op: e4[1], tail: e4[3] }))) }) : (de = r3, r3 = o);
+            } else de = r3, r3 = o;
+            return r3;
+          }
+          __name(ke, "ke");
+          function _e() {
+            var e4;
+            return (e4 = je()) === o && (e4 = We()), e4;
+          }
+          __name(_e, "_e");
+          function je() {
+            var r3, t2, l2;
+            return r3 = de, t2 = (function() {
+              var r4, t3, l3, s2, n2;
+              if (r4 = de, t3 = (function() {
+                var r5, t4, l4, s3, n3, u2;
+                if (r5 = de, t4 = (function() {
+                  var r6, t5, l5, s4;
+                  return r6 = de, (t5 = Be()) === o && (t5 = null), t5 !== o ? (100 === e3.charCodeAt(de) ? (l5 = "d", de++) : (l5 = o, 0 === ge && Ce(w)), l5 !== o ? (s4 = (function() {
+                    var r7, t6;
+                    return r7 = de, 70 === e3.charCodeAt(de) ? (t6 = "F", de++) : (t6 = o, 0 === ge && Ce(I)), t6 === o && (102 === e3.charCodeAt(de) ? (t6 = "f", de++) : (t6 = o, 0 === ge && Ce(y))), t6 !== o && (he = r7, t6 = { type: "fate" }), t6;
+                  })(), s4 === o && (s4 = (function() {
+                    var r7, t6;
+                    return r7 = de, 37 === e3.charCodeAt(de) ? (t6 = "%", de++) : (t6 = o, 0 === ge && Ce(B)), t6 !== o && (he = r7, t6 = { type: "number", value: "100" }), t6;
+                  })(), s4 === o && (s4 = Be())), s4 !== o ? (he = r6, r6 = t5 = { die: s4, count: t5 || { type: "number", value: 1 }, type: "die" }) : (de = r6, r6 = o)) : (de = r6, r6 = o)) : (de = r6, r6 = o), r6;
+                })(), t4 !== o) {
+                  for (l4 = [], (s3 = De()) === o && (s3 = Se()) === o && (s3 = Oe()) === o && (s3 = Ge()) === o && (s3 = Pe()); s3 !== o; ) l4.push(s3), (s3 = De()) === o && (s3 = Se()) === o && (s3 = Oe()) === o && (s3 = Ge()) === o && (s3 = Pe());
+                  l4 !== o ? (he = r5, u2 = l4, (n3 = t4).mods = (n3.mods || []).concat(u2), r5 = t4 = n3) : (de = r5, r5 = o);
+                } else de = r5, r5 = o;
+                return r5;
+              })(), t3 !== o) {
+                for (l3 = [], (s2 = Fe()) === o && (s2 = Ee()) === o && (s2 = Re()) === o && (s2 = we()) === o && (s2 = $e()) === o && (s2 = Te()); s2 !== o; ) l3.push(s2), (s2 = Fe()) === o && (s2 = Ee()) === o && (s2 = Re()) === o && (s2 = we()) === o && (s2 = $e()) === o && (s2 = Te());
+                l3 !== o ? ((s2 = (function() {
+                  var r5, t4, l4, s3, n3;
+                  return r5 = de, 109 === e3.charCodeAt(de) ? (t4 = "m", de++) : (t4 = o, 0 === ge && Ce(x)), t4 !== o ? (116 === e3.charCodeAt(de) ? (l4 = "t", de++) : (l4 = o, 0 === ge && Ce(A)), l4 === o && (l4 = null), l4 !== o ? ((s3 = He()) === o && (s3 = null), s3 !== o ? (n3 = (function() {
+                    var r6, t5, l5;
+                    return r6 = de, 62 === e3.charCodeAt(de) ? (t5 = d, de++) : (t5 = o, 0 === ge && Ce(h)), t5 === o && (60 === e3.charCodeAt(de) ? (t5 = p, de++) : (t5 = o, 0 === ge && Ce(f)), t5 === o && (61 === e3.charCodeAt(de) ? (t5 = v, de++) : (t5 = o, 0 === ge && Ce(g)))), t5 !== o && (l5 = Be()) !== o ? (he = r6, r6 = t5 = { mod: t5, expr: l5 }) : (de = r6, r6 = o), r6;
+                  })(), n3 === o && (n3 = null), n3 !== o ? (he = r5, r5 = t4 = (function(e4, r6, t5) {
+                    const l5 = { type: "match", min: r6 || { type: "number", value: 2 }, count: !!e4 };
+                    return t5 && (l5.mod = t5.mod, l5.expr = t5.expr), l5;
+                  })(l4, s3, n3)) : (de = r5, r5 = o)) : (de = r5, r5 = o)) : (de = r5, r5 = o)) : (de = r5, r5 = o), r5;
+                })()) === o && (s2 = null), s2 !== o ? (n2 = (function() {
+                  var r5, t4, l4;
+                  return r5 = de, 115 === e3.charCodeAt(de) ? (t4 = "s", de++) : (t4 = o, 0 === ge && Ce(_)), t4 !== o ? (97 === e3.charCodeAt(de) ? (l4 = "a", de++) : (l4 = o, 0 === ge && Ce(j)), l4 === o && (100 === e3.charCodeAt(de) ? (l4 = "d", de++) : (l4 = o, 0 === ge && Ce(w))), l4 === o && (l4 = null), l4 !== o ? (he = r5, r5 = t4 = "d" == l4 ? { type: "sort", asc: false } : { type: "sort", asc: true }) : (de = r5, r5 = o)) : (de = r5, r5 = o), r5;
+                })(), n2 === o && (n2 = null), n2 !== o ? (he = r4, r4 = t3 = (function(e4, r5, t4, l4) {
+                  const o2 = r5.filter(((e5) => ["success", "failure"].includes(e5.type)));
+                  return r5 = r5.filter(((e5) => !o2.includes(e5))), e4.mods = (e4.mods || []).concat(r5), o2.length > 0 && (e4.targets = o2), t4 && (e4.match = t4), l4 && (e4.sort = l4), e4;
+                })(t3, l3, s2, n2)) : (de = r4, r4 = o)) : (de = r4, r4 = o)) : (de = r4, r4 = o);
+              } else de = r4, r4 = o;
+              return r4;
+            })(), t2 !== o && Le() !== o ? ((l2 = Je()) === o && (l2 = null), l2 !== o ? (he = r3, r3 = t2 = i(t2, l2)) : (de = r3, r3 = o)) : (de = r3, r3 = o), r3;
+          }
+          __name(je, "je");
+          function Oe() {
+            var r3, t2, l2;
+            return r3 = de, 33 === e3.charCodeAt(de) ? (t2 = "!", de++) : (t2 = o, 0 === ge && Ce(O)), t2 !== o ? ((l2 = Ie()) === o && (l2 = null), l2 !== o ? (he = r3, r3 = t2 = { type: "explode", target: l2 }) : (de = r3, r3 = o)) : (de = r3, r3 = o), r3;
+          }
+          __name(Oe, "Oe");
+          function De() {
+            var r3, t2, l2;
+            return r3 = de, "!!" === e3.substr(de, 2) ? (t2 = "!!", de += 2) : (t2 = o, 0 === ge && Ce(D)), t2 !== o ? ((l2 = Ie()) === o && (l2 = null), l2 !== o ? (he = r3, r3 = t2 = { type: "compound", target: l2 }) : (de = r3, r3 = o)) : (de = r3, r3 = o), r3;
+          }
+          __name(De, "De");
+          function Se() {
+            var r3, t2, l2;
+            return r3 = de, "!p" === e3.substr(de, 2) ? (t2 = "!p", de += 2) : (t2 = o, 0 === ge && Ce(S)), t2 !== o ? ((l2 = Ie()) === o && (l2 = null), l2 !== o ? (he = r3, r3 = t2 = { type: "penetrate", target: l2 }) : (de = r3, r3 = o)) : (de = r3, r3 = o), r3;
+          }
+          __name(Se, "Se");
+          function Pe() {
+            var r3, t2, l2;
+            return r3 = de, 114 === e3.charCodeAt(de) ? (t2 = "r", de++) : (t2 = o, 0 === ge && Ce(P)), t2 !== o ? ((l2 = Ie()) === o && (l2 = null), l2 !== o ? (he = r3, r3 = t2 = { type: "reroll", target: l2 || Ne }) : (de = r3, r3 = o)) : (de = r3, r3 = o), r3;
+          }
+          __name(Pe, "Pe");
+          function Ge() {
+            var r3, t2, l2;
+            return r3 = de, "ro" === e3.substr(de, 2) ? (t2 = "ro", de += 2) : (t2 = o, 0 === ge && Ce(G)), t2 !== o ? ((l2 = Ie()) === o && (l2 = null), l2 !== o ? (he = r3, r3 = t2 = { type: "rerollOnce", target: l2 || Ne }) : (de = r3, r3 = o)) : (de = r3, r3 = o), r3;
+          }
+          __name(Ge, "Ge");
+          function Ie() {
+            var r3, t2, l2;
+            return r3 = de, 62 === e3.charCodeAt(de) ? (t2 = d, de++) : (t2 = o, 0 === ge && Ce(h)), t2 === o && (60 === e3.charCodeAt(de) ? (t2 = p, de++) : (t2 = o, 0 === ge && Ce(f)), t2 === o && (61 === e3.charCodeAt(de) ? (t2 = v, de++) : (t2 = o, 0 === ge && Ce(g)))), t2 === o && (t2 = null), t2 !== o && (l2 = Be()) !== o ? (he = r3, r3 = t2 = { type: "target", mod: t2, value: l2 }) : (de = r3, r3 = o), r3;
+          }
+          __name(Ie, "Ie");
+          function Be() {
+            var e4;
+            return (e4 = Ke()) === o && (e4 = He()), e4;
+          }
+          __name(Be, "Be");
+          function We() {
+            var r3;
+            return (r3 = (function() {
+              var r4, t2, l2, s2;
+              return r4 = de, "[[" === e3.substr(de, 2) ? (t2 = "[[", de += 2) : (t2 = o, 0 === ge && Ce(a)), t2 !== o && (l2 = We()) !== o ? ("]]" === e3.substr(de, 2) ? (s2 = "]]", de += 2) : (s2 = o, 0 === ge && Ce(c)), s2 !== o ? (he = r4, r4 = t2 = { type: "inline", expr: l2 }) : (de = r4, r4 = o)) : (de = r4, r4 = o), r4;
+            })()) === o && (r3 = Ue()) === o && (r3 = Ke()), r3;
+          }
+          __name(We, "We");
+          function Ke() {
+            var r3, t2, l2, s2, n2, u2, a2;
+            return r3 = de, 40 === e3.charCodeAt(de) ? (t2 = "(", de++) : (t2 = o, 0 === ge && Ce(W)), t2 !== o && (l2 = Ue()) !== o ? (41 === e3.charCodeAt(de) ? (s2 = ")", de++) : (s2 = o, 0 === ge && Ce(K)), s2 !== o && Le() !== o ? ((n2 = Je()) === o && (n2 = null), n2 !== o ? (he = r3, u2 = l2, (a2 = n2) && (u2.label = a2), r3 = t2 = u2) : (de = r3, r3 = o)) : (de = r3, r3 = o)) : (de = r3, r3 = o), r3;
+          }
+          __name(Ke, "Ke");
+          function Ue() {
+            var r3, t2, l2, s2, n2, u2, a2, c2;
+            if (r3 = de, (t2 = ze()) !== o) {
+              for (l2 = [], s2 = de, (n2 = Le()) !== o ? (43 === e3.charCodeAt(de) ? (u2 = F, de++) : (u2 = o, 0 === ge && Ce(k)), u2 === o && (45 === e3.charCodeAt(de) ? (u2 = "-", de++) : (u2 = o, 0 === ge && Ce(U))), u2 !== o && (a2 = Le()) !== o && (c2 = ze()) !== o ? s2 = n2 = [n2, u2, a2, c2] : (de = s2, s2 = o)) : (de = s2, s2 = o); s2 !== o; ) l2.push(s2), s2 = de, (n2 = Le()) !== o ? (43 === e3.charCodeAt(de) ? (u2 = F, de++) : (u2 = o, 0 === ge && Ce(k)), u2 === o && (45 === e3.charCodeAt(de) ? (u2 = "-", de++) : (u2 = o, 0 === ge && Ce(U))), u2 !== o && (a2 = Le()) !== o && (c2 = ze()) !== o ? s2 = n2 = [n2, u2, a2, c2] : (de = s2, s2 = o)) : (de = s2, s2 = o);
+              l2 !== o ? (he = r3, r3 = t2 = z(t2, l2)) : (de = r3, r3 = o);
+            } else de = r3, r3 = o;
+            return r3;
+          }
+          __name(Ue, "Ue");
+          function ze() {
+            var r3, t2, l2, s2, n2, u2, a2, c2;
+            if (r3 = de, (t2 = Ve()) !== o) {
+              for (l2 = [], s2 = de, (n2 = Le()) !== o ? (42 === e3.charCodeAt(de) ? (u2 = "*", de++) : (u2 = o, 0 === ge && Ce(V)), u2 === o && (47 === e3.charCodeAt(de) ? (u2 = "/", de++) : (u2 = o, 0 === ge && Ce(q))), u2 !== o && (a2 = Le()) !== o && (c2 = Ve()) !== o ? s2 = n2 = [n2, u2, a2, c2] : (de = s2, s2 = o)) : (de = s2, s2 = o); s2 !== o; ) l2.push(s2), s2 = de, (n2 = Le()) !== o ? (42 === e3.charCodeAt(de) ? (u2 = "*", de++) : (u2 = o, 0 === ge && Ce(V)), u2 === o && (47 === e3.charCodeAt(de) ? (u2 = "/", de++) : (u2 = o, 0 === ge && Ce(q))), u2 !== o && (a2 = Le()) !== o && (c2 = Ve()) !== o ? s2 = n2 = [n2, u2, a2, c2] : (de = s2, s2 = o)) : (de = s2, s2 = o);
+              l2 !== o ? (he = r3, r3 = t2 = z(t2, l2)) : (de = r3, r3 = o);
+            } else de = r3, r3 = o;
+            return r3;
+          }
+          __name(ze, "ze");
+          function Ve() {
+            var r3, t2, l2, s2, n2, u2, a2, c2;
+            if (r3 = de, (t2 = qe()) !== o) {
+              for (l2 = [], s2 = de, (n2 = Le()) !== o ? (e3.substr(de, 2) === H ? (u2 = H, de += 2) : (u2 = o, 0 === ge && Ce(J)), u2 === o && (37 === e3.charCodeAt(de) ? (u2 = "%", de++) : (u2 = o, 0 === ge && Ce(B))), u2 !== o && (a2 = Le()) !== o && (c2 = qe()) !== o ? s2 = n2 = [n2, u2, a2, c2] : (de = s2, s2 = o)) : (de = s2, s2 = o); s2 !== o; ) l2.push(s2), s2 = de, (n2 = Le()) !== o ? (e3.substr(de, 2) === H ? (u2 = H, de += 2) : (u2 = o, 0 === ge && Ce(J)), u2 === o && (37 === e3.charCodeAt(de) ? (u2 = "%", de++) : (u2 = o, 0 === ge && Ce(B))), u2 !== o && (a2 = Le()) !== o && (c2 = qe()) !== o ? s2 = n2 = [n2, u2, a2, c2] : (de = s2, s2 = o)) : (de = s2, s2 = o);
+              l2 !== o ? (he = r3, r3 = t2 = z(t2, l2)) : (de = r3, r3 = o);
+            } else de = r3, r3 = o;
+            return r3;
+          }
+          __name(Ve, "Ve");
+          function qe() {
+            var r3;
+            return (r3 = (function() {
+              var r4, t2, l2, s2, n2;
+              return r4 = de, t2 = (function() {
+                var r5;
+                return e3.substr(de, 5) === L ? (r5 = L, de += 5) : (r5 = o, 0 === ge && Ce(N)), r5 === o && (e3.substr(de, 4) === Q ? (r5 = Q, de += 4) : (r5 = o, 0 === ge && Ce(X)), r5 === o && (e3.substr(de, 5) === Y ? (r5 = Y, de += 5) : (r5 = o, 0 === ge && Ce(Z)), r5 === o && ("abs" === e3.substr(de, 3) ? (r5 = "abs", de += 3) : (r5 = o, 0 === ge && Ce(ee))))), r5;
+              })(), t2 !== o && Le() !== o ? (40 === e3.charCodeAt(de) ? (l2 = "(", de++) : (l2 = o, 0 === ge && Ce(W)), l2 !== o && Le() !== o && (s2 = Ue()) !== o && Le() !== o ? (41 === e3.charCodeAt(de) ? (n2 = ")", de++) : (n2 = o, 0 === ge && Ce(K)), n2 !== o ? (he = r4, r4 = t2 = { type: "mathfunction", op: t2, expr: s2 }) : (de = r4, r4 = o)) : (de = r4, r4 = o)) : (de = r4, r4 = o), r4;
+            })()) === o && (r3 = (function() {
+              var r4, t2, l2;
+              return r4 = de, t2 = (function() {
+                var r5, t3, l3, s2, n2, u2, a2, c2;
+                if (r5 = de, t3 = (function() {
+                  var r6, t4, l4, s3, n3, u3, a3, c3, i2;
+                  if (r6 = de, 123 === e3.charCodeAt(de) ? (t4 = "{", de++) : (t4 = o, 0 === ge && Ce(T)), t4 !== o) if (Le() !== o) if ((l4 = ke()) !== o) {
+                    for (s3 = [], n3 = de, (u3 = Le()) !== o ? (44 === e3.charCodeAt(de) ? (a3 = ",", de++) : (a3 = o, 0 === ge && Ce($)), a3 !== o && (c3 = Le()) !== o && (i2 = ke()) !== o ? n3 = u3 = [u3, a3, c3, i2] : (de = n3, n3 = o)) : (de = n3, n3 = o); n3 !== o; ) s3.push(n3), n3 = de, (u3 = Le()) !== o ? (44 === e3.charCodeAt(de) ? (a3 = ",", de++) : (a3 = o, 0 === ge && Ce($)), a3 !== o && (c3 = Le()) !== o && (i2 = ke()) !== o ? n3 = u3 = [u3, a3, c3, i2] : (de = n3, n3 = o)) : (de = n3, n3 = o);
+                    s3 !== o && (n3 = Le()) !== o ? (125 === e3.charCodeAt(de) ? (u3 = "}", de++) : (u3 = o, 0 === ge && Ce(E)), u3 !== o ? (he = r6, r6 = t4 = { rolls: [l4, ...s3.map(((e4) => e4[3]))], type: "group" }) : (de = r6, r6 = o)) : (de = r6, r6 = o);
+                  } else de = r6, r6 = o;
+                  else de = r6, r6 = o;
+                  else de = r6, r6 = o;
+                  return r6;
+                })(), t3 !== o) {
+                  for (l3 = [], (s2 = Ee()) === o && (s2 = Fe()) === o && (s2 = Re()) === o && (s2 = we()); s2 !== o; ) l3.push(s2), (s2 = Ee()) === o && (s2 = Fe()) === o && (s2 = Re()) === o && (s2 = we());
+                  l3 !== o && (s2 = Le()) !== o ? ((n2 = Je()) === o && (n2 = null), n2 !== o ? (he = r5, u2 = t3, c2 = n2, (a2 = l3).length > 0 && (u2.mods = (u2.mods || []).concat(a2)), c2 && (u2.label = c2), r5 = t3 = u2) : (de = r5, r5 = o)) : (de = r5, r5 = o);
+                } else de = r5, r5 = o;
+                return r5;
+              })(), t2 === o && (t2 = je()) === o && (t2 = He()), t2 !== o && Le() !== o ? ((l2 = Je()) === o && (l2 = null), l2 !== o ? (he = r4, r4 = t2 = i(t2, l2)) : (de = r4, r4 = o)) : (de = r4, r4 = o), r4;
+            })()) === o && (r3 = Ke()), r3;
+          }
+          __name(qe, "qe");
+          function He() {
+            var r3, t2, l2, s2;
+            if (ge++, r3 = de, 45 === e3.charCodeAt(de) ? (t2 = "-", de++) : (t2 = o, 0 === ge && Ce(U)), t2 === o && (t2 = null), t2 !== o) {
+              if (l2 = [], te.test(e3.charAt(de)) ? (s2 = e3.charAt(de), de++) : (s2 = o, 0 === ge && Ce(le)), s2 !== o) for (; s2 !== o; ) l2.push(s2), te.test(e3.charAt(de)) ? (s2 = e3.charAt(de), de++) : (s2 = o, 0 === ge && Ce(le));
+              else l2 = o;
+              l2 !== o ? (he = r3, r3 = t2 = { type: "number", value: parseInt(e3.substring(he, de), 10) }) : (de = r3, r3 = o);
+            } else de = r3, r3 = o;
+            return ge--, r3 === o && (t2 = o, 0 === ge && Ce(re)), r3;
+          }
+          __name(He, "He");
+          function Je() {
+            var r3, t2, l2, s2;
+            if (r3 = de, 91 === e3.charCodeAt(de) ? (t2 = "[", de++) : (t2 = o, 0 === ge && Ce(oe)), t2 !== o) {
+              if (l2 = [], se.test(e3.charAt(de)) ? (s2 = e3.charAt(de), de++) : (s2 = o, 0 === ge && Ce(ne)), s2 !== o) for (; s2 !== o; ) l2.push(s2), se.test(e3.charAt(de)) ? (s2 = e3.charAt(de), de++) : (s2 = o, 0 === ge && Ce(ne));
+              else l2 = o;
+              l2 !== o ? (93 === e3.charCodeAt(de) ? (s2 = "]", de++) : (s2 = o, 0 === ge && Ce(ue)), s2 !== o ? (he = r3, r3 = t2 = l2.join("")) : (de = r3, r3 = o)) : (de = r3, r3 = o);
+            } else de = r3, r3 = o;
+            return r3;
+          }
+          __name(Je, "Je");
+          function Le() {
+            var r3, t2;
+            for (ge++, r3 = [], ce.test(e3.charAt(de)) ? (t2 = e3.charAt(de), de++) : (t2 = o, 0 === ge && Ce(ie)); t2 !== o; ) r3.push(t2), ce.test(e3.charAt(de)) ? (t2 = e3.charAt(de), de++) : (t2 = o, 0 === ge && Ce(ie));
+            return ge--, r3 === o && (t2 = o, 0 === ge && Ce(ae)), r3;
+          }
+          __name(Le, "Le");
+          const Ne = { type: "target", mod: "=", value: { type: "number", value: 1 } }, Qe = { type: "number", value: 1 };
+          if ((l = n()) !== o && de === e3.length) return l;
+          throw l !== o && de < e3.length && Ce({ type: "end" }), Xe = ve, Ye = fe < e3.length ? e3.charAt(fe) : null, Ze = fe < e3.length ? Ae(fe, fe + 1) : Ae(fe, fe), new r2(r2.buildMessage(Xe, Ye), Xe, Ye, Ze);
+          var Xe, Ye, Ze;
+        }, "parse") };
+      } }, r = {};
+      return (/* @__PURE__ */ __name(function t(l) {
+        var o = r[l];
+        if (void 0 !== o) return o.exports;
+        var s = r[l] = { exports: {} };
+        return e[l].call(s.exports, s, s.exports, t), s.exports;
+      }, "t"))(607);
+    })()));
+  }
+});
 
 // workers/dice-roll/ammo.worker.es.js
 var _scriptDir = typeof document !== "undefined" && document.currentScript ? document.currentScript.src : void 0;
@@ -30899,6 +31727,511 @@ var theme_config_default = {
   diceAvailable: ["d4", "d6", "d8", "d10", "d12", "d20", "d100"]
 };
 
+// src/parser/roll20Adapter.js
+var diceRollerParserNamespace = __toESM(require_dist(), 1);
+var diceRollerParser = diceRollerParserNamespace.default || diceRollerParserNamespace;
+var { DiceRoller } = diceRollerParser;
+var defaultRoll20ParserOptions = {
+  maxNotationLength: 200,
+  maxDiceCount: 100,
+  maxSides: 100,
+  maxRerollDepth: 100
+};
+var rerollingModTypes = /* @__PURE__ */ new Set(["explode", "compound", "penetrate", "reroll", "rerollOnce"]);
+var RollNotationError = class extends Error {
+  static {
+    __name(this, "RollNotationError");
+  }
+  constructor(message, statusCode = 400) {
+    super(message);
+    this.name = "RollNotationError";
+    this.statusCode = statusCode;
+  }
+};
+var notationError = /* @__PURE__ */ __name((message) => new RollNotationError(message), "notationError");
+var toOptions = /* @__PURE__ */ __name((options) => ({
+  ...defaultRoll20ParserOptions,
+  ...options
+}), "toOptions");
+var cloneForMetadata = /* @__PURE__ */ __name((value) => {
+  if (value === void 0) {
+    return void 0;
+  }
+  return JSON.parse(JSON.stringify(value));
+}, "cloneForMetadata");
+var normalizeNotationForParser = /* @__PURE__ */ __name((notation) => notation.replace(/d00(?!\d)/gi, "d100").replace(/dFATE\b/gi, "dF"), "normalizeNotationForParser");
+var getNotationText = /* @__PURE__ */ __name((notation) => {
+  if (typeof notation !== "string") {
+    throw notationError("Roll notation must be a string.");
+  }
+  const text = notation.trim();
+  if (!text) {
+    throw notationError("Roll notation cannot be empty.");
+  }
+  return text;
+}, "getNotationText");
+var rejectUnresolvedAppTokens = /* @__PURE__ */ __name((notation) => {
+  const match = notation.match(/@[A-Za-z_][\w.]*/u) || notation.match(/@/u);
+  if (match) {
+    throw notationError(`Unsupported roll notation contains unresolved app token '${match[0]}'. Resolve app tokens before rolling.`);
+  }
+}, "rejectUnresolvedAppTokens");
+var ensureNotationLength = /* @__PURE__ */ __name((notation, options) => {
+  if (notation.length > options.maxNotationLength) {
+    throw notationError(`Roll notation is too long. Maximum length is ${options.maxNotationLength} characters.`);
+  }
+}, "ensureNotationLength");
+var isObject = /* @__PURE__ */ __name((value) => value !== null && typeof value === "object", "isObject");
+var hasNonEmptyLabel = /* @__PURE__ */ __name((node) => {
+  if (!isObject(node)) {
+    return false;
+  }
+  if (typeof node.label === "string" && node.label.trim()) {
+    return true;
+  }
+  return Object.values(node).some((value) => {
+    if (Array.isArray(value)) {
+      return value.some(hasNonEmptyLabel);
+    }
+    return hasNonEmptyLabel(value);
+  });
+}, "hasNonEmptyLabel");
+var hasRerollingMods = /* @__PURE__ */ __name((node) => {
+  if (!isObject(node)) {
+    return false;
+  }
+  if (rerollingModTypes.has(node.type)) {
+    return true;
+  }
+  return Object.values(node).some((value) => {
+    if (Array.isArray(value)) {
+      return value.some(hasRerollingMods);
+    }
+    return hasRerollingMods(value);
+  });
+}, "hasRerollingMods");
+var hasDice = /* @__PURE__ */ __name((node) => {
+  if (!isObject(node)) {
+    return false;
+  }
+  if (node.type === "die") {
+    return true;
+  }
+  return Object.values(node).some((value) => {
+    if (Array.isArray(value)) {
+      return value.some(hasDice);
+    }
+    return hasDice(value);
+  });
+}, "hasDice");
+var evaluateStaticNumber = /* @__PURE__ */ __name((node, context) => {
+  if (!isObject(node)) {
+    throw notationError(`Unsupported ${context}.`);
+  }
+  switch (node.type) {
+    case "number":
+      return Number(node.value);
+    case "expression": {
+      let value = evaluateStaticNumber(node.head, context);
+      for (const op of node.ops || []) {
+        const tail = evaluateStaticNumber(op.tail, context);
+        switch (op.op) {
+          case "+":
+            value += tail;
+            break;
+          case "-":
+            value -= tail;
+            break;
+          case "*":
+            value *= tail;
+            break;
+          case "/":
+            value /= tail;
+            break;
+          case "%":
+            value %= tail;
+            break;
+          case "**":
+            value **= tail;
+            break;
+          default:
+            throw notationError(`Unsupported ${context} math operator '${op.op}'.`);
+        }
+      }
+      return value;
+    }
+    case "mathfunction": {
+      const value = evaluateStaticNumber(node.expr, context);
+      switch (node.op) {
+        case "floor":
+          return Math.floor(value);
+        case "ceil":
+          return Math.ceil(value);
+        case "round":
+          return Math.round(value);
+        case "abs":
+          return Math.abs(value);
+        default:
+          throw notationError(`Unsupported ${context} math function '${node.op}'.`);
+      }
+    }
+    default:
+      throw notationError(`Unsupported ${context}. Dice count and sides must be static numbers.`);
+  }
+}, "evaluateStaticNumber");
+var ensurePositiveInteger = /* @__PURE__ */ __name((value, context) => {
+  if (!Number.isInteger(value) || value < 1) {
+    throw notationError(`Invalid ${context}. Expected a positive integer.`);
+  }
+  return value;
+}, "ensurePositiveInteger");
+var normalizeSides = /* @__PURE__ */ __name((die, options) => {
+  if (die?.type === "fate") {
+    return "fate";
+  }
+  const sides = ensurePositiveInteger(evaluateStaticNumber(die, "die sides"), "die sides");
+  if (sides < 2) {
+    throw notationError("Invalid die sides. Dice must have at least 2 sides.");
+  }
+  if (sides > options.maxSides) {
+    throw notationError(`Roll notation exceeds the maximum die size of d${options.maxSides}.`);
+  }
+  return sides;
+}, "normalizeSides");
+var dieGroupNotation = /* @__PURE__ */ __name((qty, sides) => `${qty}d${sides === "fate" ? "F" : sides}`, "dieGroupNotation");
+var createDiceGroup = /* @__PURE__ */ __name((node, options, path) => {
+  const qty = ensurePositiveInteger(evaluateStaticNumber(node.count, "dice count"), "dice count");
+  const sides = normalizeSides(node.die, options);
+  return {
+    qty,
+    sides: sides === "fate" ? "fate" : `d${sides}`,
+    modifier: 0,
+    notation: dieGroupNotation(qty, sides),
+    data: void 0,
+    parserPath: path
+  };
+}, "createDiceGroup");
+var appendDiceGroups = /* @__PURE__ */ __name((node, groups, options, path = "root") => {
+  if (!isObject(node)) {
+    return;
+  }
+  switch (node.type) {
+    case "die":
+      groups.push(createDiceGroup(node, options, path));
+      for (const mod of [...node.mods || [], ...node.targets || []]) {
+        if (mod.expr && hasDice(mod.expr)) {
+          throw notationError("Unsupported roll notation. Modifier expressions cannot require additional physical dice.");
+        }
+        if (mod.target?.value && hasDice(mod.target.value)) {
+          throw notationError("Unsupported roll notation. Reroll target expressions cannot require additional physical dice.");
+        }
+      }
+      if (node.match?.expr && hasDice(node.match.expr)) {
+        throw notationError("Unsupported roll notation. Match expressions cannot require additional physical dice.");
+      }
+      break;
+    case "diceExpression":
+    case "expression":
+      appendDiceGroups(node.head, groups, options, `${path}.head`);
+      for (let i = 0; i < (node.ops || []).length; i++) {
+        appendDiceGroups(node.ops[i].tail, groups, options, `${path}.ops.${i}`);
+      }
+      break;
+    case "group":
+      for (let i = 0; i < (node.rolls || []).length; i++) {
+        appendDiceGroups(node.rolls[i], groups, options, `${path}.rolls.${i}`);
+      }
+      for (const mod of node.mods || []) {
+        if (mod.expr && hasDice(mod.expr)) {
+          throw notationError("Unsupported roll notation. Group modifier expressions cannot require additional physical dice.");
+        }
+      }
+      break;
+    case "mathfunction":
+      appendDiceGroups(node.expr, groups, options, `${path}.expr`);
+      break;
+    case "inline":
+      appendDiceGroups(node.expr, groups, options, `${path}.expr`);
+      break;
+    case "number":
+      break;
+    default:
+      throw notationError(`Unsupported roll notation node '${node.type}'.`);
+  }
+}, "appendDiceGroups");
+var countDice = /* @__PURE__ */ __name((groups) => groups.reduce((total, group) => total + group.qty, 0), "countDice");
+var getSingleGroupConstantModifier = /* @__PURE__ */ __name((node) => {
+  if (node?.type !== "expression" || hasDice({ ...node, head: void 0 })) {
+    return 0;
+  }
+  if (!hasDice(node.head)) {
+    return 0;
+  }
+  let modifier = 0;
+  for (const op of node.ops || []) {
+    if (op.tail?.type !== "number" || !["+", "-"].includes(op.op)) {
+      return 0;
+    }
+    modifier += op.op === "+" ? Number(op.tail.value) : -Number(op.tail.value);
+  }
+  return modifier;
+}, "getSingleGroupConstantModifier");
+var maybeApplyLegacySingleModifier = /* @__PURE__ */ __name((groups, parsedTree, originalNotation) => {
+  if (groups.length !== 1) {
+    return groups;
+  }
+  const modifier = getSingleGroupConstantModifier(parsedTree);
+  if (!modifier) {
+    return groups;
+  }
+  return [{
+    ...groups[0],
+    modifier,
+    notation: originalNotation.replace(/\s+/g, "")
+  }];
+}, "maybeApplyLegacySingleModifier");
+var maybeApplyPercentileSingleDie = /* @__PURE__ */ __name((groups, originalNotation) => {
+  let percentileCount = (originalNotation.match(/[dD](?:00|%)(?!\d)/g) || []).length;
+  if (!percentileCount) {
+    return groups;
+  }
+  return groups.map((group) => {
+    if (percentileCount > 0 && group.sides === "d100") {
+      percentileCount--;
+      return { ...group, data: "single" };
+    }
+    return group;
+  });
+}, "maybeApplyPercentileSingleDie");
+var validateDiceGroups = /* @__PURE__ */ __name((groups, options) => {
+  const totalDice = countDice(groups);
+  if (totalDice < 1) {
+    throw notationError("Roll notation must include at least one physical die.");
+  }
+  if (totalDice > options.maxDiceCount) {
+    throw notationError(`Roll notation requests ${totalDice} dice. Maximum dice count is ${options.maxDiceCount}.`);
+  }
+  groups.forEach((group) => {
+    ensurePositiveInteger(Number(group.qty), "dice count");
+    const sides = group.sides;
+    if (sides === "fate") {
+      return;
+    }
+    const numericText = String(sides).replace(/\D/g, "");
+    if (!Number.isInteger(sides) && !numericText && typeof sides === "string") {
+      return;
+    }
+    const numericSides = Number.isInteger(sides) ? sides : parseInt(numericText, 10);
+    if (!Number.isInteger(numericSides) || numericSides < 2) {
+      throw notationError("Invalid die sides. Dice must have at least 2 sides.");
+    }
+    if (numericSides > options.maxSides) {
+      throw notationError(`Roll notation exceeds the maximum die size of d${options.maxSides}.`);
+    }
+  });
+  return groups;
+}, "validateDiceGroups");
+var parseAdvancedNotation = /* @__PURE__ */ __name((notation, options = {}) => {
+  const parserOptions = toOptions(options);
+  const originalNotation = getNotationText(notation);
+  ensureNotationLength(originalNotation, parserOptions);
+  rejectUnresolvedAppTokens(originalNotation);
+  const parserNotation = normalizeNotationForParser(originalNotation);
+  const roller = new DiceRoller(null, parserOptions.maxRerollDepth);
+  let parsedTree;
+  try {
+    parsedTree = roller.parse(parserNotation);
+  } catch (error) {
+    throw notationError(`Invalid roll notation '${originalNotation}': ${error.message}`);
+  }
+  if (hasNonEmptyLabel(parsedTree)) {
+    throw notationError(`Unsupported roll notation '${originalNotation}': unexpected trailing text '${parsedTree.label.trim()}'.`);
+  }
+  if (hasRerollingMods(parsedTree) && !parserOptions.allowRerollingMods) {
+    throw notationError(`Reroll/explode notation is not yet supported in the replay API. Maximum configured reroll/explode depth is ${parserOptions.maxRerollDepth}.`);
+  }
+  const diceGroups = [];
+  appendDiceGroups(parsedTree, diceGroups, parserOptions);
+  validateDiceGroups(diceGroups, parserOptions);
+  const physicalGroups = maybeApplyLegacySingleModifier(
+    maybeApplyPercentileSingleDie(diceGroups, originalNotation),
+    parsedTree,
+    originalNotation
+  );
+  return {
+    originalNotation,
+    parserNotation,
+    diceGroups: physicalGroups,
+    parsedTree,
+    mode: "advanced"
+  };
+}, "parseAdvancedNotation");
+var legacyValidNumber = /* @__PURE__ */ __name((value, fallback, notationText) => {
+  const number = value === "" || value === void 0 ? fallback : Number(value);
+  if (Number.isNaN(number) || !Number.isInteger(number) || number < 1) {
+    throw notationError(`Invalid notation: ${notationText}`);
+  }
+  return number;
+}, "legacyValidNumber");
+var parseLegacySimpleNotation = /* @__PURE__ */ __name((input, diceAvailable = [], options = {}) => {
+  const parserOptions = toOptions(options);
+  const notation = Array.isArray(input) ? input : String(input).split(",").map((part) => part.trim()).filter(Boolean);
+  const parsedNotation = [];
+  const percentNotation = /^(\d*)[dD](00|%)([+-]\d+)?$/i;
+  const fudgeNotation = /^(\d*)[dD](f+[ate]*)([+-]\d+)?$/i;
+  const diceNotation = /^(\d*)[dD](\d+)([+-]\d+)?$/i;
+  const customNotation = /^(\d*)[dD]([\d\w]+)([+-]\d+)?$/i;
+  notation.forEach((roll) => {
+    if (typeof roll === "object" && roll !== null) {
+      if (!roll.sides) {
+        throw notationError("Roll notation is missing sides");
+      }
+      parsedNotation.push({ qty: 1, modifier: 0, ...roll });
+      return;
+    }
+    const cleanNotation = String(roll).trim().replace(/\s+/g, "");
+    const match = cleanNotation.match(percentNotation) || cleanNotation.match(fudgeNotation) || cleanNotation.match(diceNotation) || cleanNotation.match(customNotation);
+    if (!match || match.length < 3) {
+      throw notationError(`Invalid notation: ${roll}`);
+    }
+    let modifier = 0;
+    if (match[3]) {
+      modifier = Number(match[3]);
+    }
+    const returnObj = {
+      qty: legacyValidNumber(match[1], 1, roll),
+      modifier,
+      notation: cleanNotation
+    };
+    if (cleanNotation.match(percentNotation)) {
+      returnObj.sides = "d100";
+      returnObj.data = "single";
+    } else if (cleanNotation.match(fudgeNotation)) {
+      returnObj.sides = "fate";
+    } else if (cleanNotation.match(diceNotation)) {
+      const sides = legacyValidNumber(match[2], 1, roll);
+      returnObj.sides = `d${sides}`;
+    } else if (diceAvailable.includes(match[2])) {
+      returnObj.sides = match[2];
+    } else {
+      throw notationError(`Invalid notation: ${roll}`);
+    }
+    parsedNotation.push(returnObj);
+  });
+  validateDiceGroups(parsedNotation, parserOptions);
+  return parsedNotation;
+}, "parseLegacySimpleNotation");
+var parseRollNotationInput = /* @__PURE__ */ __name((input, diceAvailable = [], options = {}) => {
+  if (typeof input === "string") {
+    try {
+      return parseAdvancedNotation(input, options);
+    } catch (error) {
+      try {
+        const diceGroups = parseLegacySimpleNotation(input, diceAvailable, options);
+        return {
+          originalNotation: input.trim(),
+          parserNotation: null,
+          diceGroups,
+          parsedTree: null,
+          mode: "legacy",
+          advancedError: error.message
+        };
+      } catch (legacyError) {
+        throw error;
+      }
+    }
+  }
+  return {
+    originalNotation: Array.isArray(input) ? input.join(",") : "",
+    parserNotation: null,
+    diceGroups: parseLegacySimpleNotation(input, diceAvailable, options),
+    parsedTree: null,
+    mode: "legacy"
+  };
+}, "parseRollNotationInput");
+var sidesFromRoll = /* @__PURE__ */ __name((roll) => {
+  if (roll.sides === "fate") {
+    return "fate";
+  }
+  if (Number.isInteger(roll.sides)) {
+    return roll.sides;
+  }
+  if (typeof roll.sides === "string") {
+    const numeric = parseInt(roll.sides.replace(/\D/g, ""), 10);
+    if (Number.isInteger(numeric)) {
+      return numeric;
+    }
+  }
+  if (typeof roll.dieType === "string") {
+    const numeric = parseInt(roll.dieType.replace(/\D/g, ""), 10);
+    if (Number.isInteger(numeric)) {
+      return numeric;
+    }
+  }
+  throw notationError("Unable to determine die sides from physical roll results.");
+}, "sidesFromRoll");
+var valueToParserRandom = /* @__PURE__ */ __name((roll) => {
+  const value = Number(roll.value);
+  const sides = sidesFromRoll(roll);
+  if (sides === "fate") {
+    if (![-1, 0, 1].includes(value)) {
+      throw notationError(`Invalid fate die result '${roll.value}'.`);
+    }
+    return value === -1 ? 0 : value === 0 ? 1 / 3 : 2 / 3;
+  }
+  if (!Number.isInteger(value) || value < 1 || value > sides) {
+    throw notationError(`Invalid d${sides} physical result '${roll.value}'.`);
+  }
+  return (value - 1) / sides;
+}, "valueToParserRandom");
+var flattenPhysicalRolls = /* @__PURE__ */ __name((physicalResults) => {
+  if (!Array.isArray(physicalResults)) {
+    return [];
+  }
+  return physicalResults.flatMap((group) => {
+    if (Array.isArray(group.rolls)) {
+      return group.rolls;
+    }
+    return group?.value !== void 0 ? [group] : [];
+  });
+}, "flattenPhysicalRolls");
+var computeFinalResult = /* @__PURE__ */ __name((parsedTree, physicalResults, options = {}) => {
+  const parserOptions = toOptions(options);
+  const notation = options.originalNotation || options.notation || "";
+  if (!parsedTree) {
+    const value = physicalResults.reduce((total, group) => total + (Number(group.value) || 0), 0);
+    return {
+      value,
+      notation,
+      type: "legacy",
+      success: null,
+      successes: 0,
+      failures: 0
+    };
+  }
+  const physicalRolls = flattenPhysicalRolls(physicalResults);
+  let index = 0;
+  const roller = new DiceRoller(() => {
+    if (!physicalRolls[index]) {
+      throw notationError("Parser requested more dice than were physically rolled.");
+    }
+    return valueToParserRandom(physicalRolls[index++]);
+  }, parserOptions.maxRerollDepth);
+  const result = roller.rollParsed(parsedTree);
+  if (index !== physicalRolls.length) {
+    throw notationError("Physical roll results did not match parsed dice notation.");
+  }
+  return {
+    value: result.value,
+    notation,
+    type: result.type,
+    success: result.success ?? null,
+    successes: result.successes || 0,
+    failures: result.failures || 0,
+    details: cloneForMetadata(result)
+  };
+}, "computeFinalResult");
+
 // server/roll-simulator-core.js
 var defaultRollOptions = {
   width: 800,
@@ -30919,7 +32252,11 @@ var defaultRollOptions = {
   delay: 10,
   theme: "default",
   themeColor: "#2e8555",
-  maxDurationMs: 1e4
+  maxDurationMs: 1e4,
+  maxNotationLength: 200,
+  maxDiceCount: 100,
+  maxSides: 100,
+  maxRerollDepth: 100
 };
 var hashSeed = /* @__PURE__ */ __name((seed) => {
   let hash = 2166136261;
@@ -30960,63 +32297,8 @@ var getColorSuffix = /* @__PURE__ */ __name((themeData, themeColor) => {
   const color = hexToRGB(themeColor);
   return color.r * 0.299 + color.g * 0.587 + color.b * 0.114 > 175 ? "_dark" : "_light";
 }, "getColorSuffix");
-var parseRollNotation = /* @__PURE__ */ __name((input, diceAvailable = []) => {
-  const notation = Array.isArray(input) ? input : String(input).split(",").map((part) => part.trim()).filter(Boolean);
-  const parsedNotation = [];
-  const diceNotation = /^(\d*)[dD](\d+)(.*)$/i;
-  const percentNotation = /^(\d*)[dD](00|%)(.*)$/i;
-  const fudgeNotation = /^(\d*)[dD](f+[ate]*)(.*)$/i;
-  const customNotation = /^(\d*)[dD]([\d\w]+)([+-]{0,1}\d+)?/i;
-  const modifier = /([+-])(\d+)/;
-  const validNumber = /* @__PURE__ */ __name((value, fallback, notationText) => {
-    const number = value === "" ? fallback : Number(value);
-    if (Number.isNaN(number) || !Number.isInteger(number) || number < 1) {
-      throw new Error(`Invalid notation: ${notationText}`);
-    }
-    return number;
-  }, "validNumber");
-  notation.forEach((roll) => {
-    if (typeof roll === "object") {
-      if (!roll.sides) {
-        throw new Error("Roll notation is missing sides");
-      }
-      parsedNotation.push({ qty: 1, modifier: 0, ...roll });
-      return;
-    }
-    const cleanNotation = String(roll).trim().replace(/\s+/g, "");
-    const match = cleanNotation.match(percentNotation) || cleanNotation.match(diceNotation) || cleanNotation.match(fudgeNotation) || cleanNotation.match(customNotation);
-    if (!match || match.length < 3) {
-      throw new Error(`Invalid notation: ${roll}`);
-    }
-    let mod = 0;
-    if (match[3] && modifier.test(match[3])) {
-      const modParts = match[3].match(modifier);
-      mod = validNumber(modParts[2], 0, roll);
-      if (modParts[1] === "-") {
-        mod *= -1;
-      }
-    }
-    const returnObj = {
-      qty: validNumber(match[1], 1, roll),
-      modifier: mod,
-      notation: cleanNotation
-    };
-    if (cleanNotation.match(percentNotation)) {
-      returnObj.sides = "d100";
-      returnObj.data = "single";
-    } else if (cleanNotation.match(fudgeNotation)) {
-      returnObj.sides = "fate";
-    } else if (diceAvailable.includes(cleanNotation.match(customNotation)[2])) {
-      returnObj.sides = match[2];
-    } else {
-      returnObj.sides = cleanNotation.match(diceNotation) ? `d${match[2]}` : match[2];
-    }
-    parsedNotation.push(returnObj);
-  });
-  return parsedNotation;
-}, "parseRollNotation");
 var normalizeDieType = /* @__PURE__ */ __name((sides) => Number.isInteger(sides) ? `d${sides}` : sides, "normalizeDieType");
-var normalizeSides = /* @__PURE__ */ __name((sides) => {
+var normalizeSides2 = /* @__PURE__ */ __name((sides) => {
   if (sides === "100") {
     return { sides: 100, data: "single" };
   }
@@ -31038,7 +32320,7 @@ var buildRollData = /* @__PURE__ */ __name(({ parsedNotation, themeData, theme, 
   const colorSuffix = getColorSuffix(themeData, themeColor);
   parsedNotation.forEach((notation) => {
     const groupId = groupIndex++;
-    const normalized = normalizeSides(notation.sides);
+    const normalized = normalizeSides2(notation.sides);
     const sides = normalized.sides;
     const data = notation.data || normalized.data;
     const dieType = normalizeDieType(sides);
@@ -31118,6 +32400,15 @@ var createPhysicsContext = /* @__PURE__ */ __name(({ Ammo, themeData, options, r
   const colliders = {};
   const boxParts = [];
   const vec = /* @__PURE__ */ __name((x, y, z) => new Ammo.btVector3(x, y, z), "vec");
+  const rigidBodies = [];
+  const collisionShapes = [];
+  const motionStates = [];
+  const constructionInfos = [];
+  const transforms = [];
+  let collisionConfiguration;
+  let dispatcher;
+  let broadphase;
+  let solver;
   const setStartPosition = /* @__PURE__ */ __name(() => {
     const edgeOffset = 0.5;
     const xMin = config.size * aspect / 2 - edgeOffset;
@@ -31141,6 +32432,7 @@ var createPhysicsContext = /* @__PURE__ */ __name(({ Ammo, themeData, options, r
       convexMesh.addPoint(vec(mesh.positions[i], mesh.positions[i + 1], mesh.positions[i + 2]), true);
     }
     convexMesh.setLocalScaling(vec(mesh.scaling[0] * config.scale, mesh.scaling[1] * config.scale, mesh.scaling[2] * config.scale));
+    collisionShapes.push(convexMesh);
     return convexMesh;
   }, "createConvexHull");
   themeData.colliders.forEach((model) => {
@@ -31167,13 +32459,17 @@ var createPhysicsContext = /* @__PURE__ */ __name(({ Ammo, themeData, options, r
     transform.setIdentity();
     transform.setOrigin(vec(pos[0], pos[1], pos[2]));
     transform.setRotation(new Ammo.btQuaternion(quat[0], quat[1], quat[2], quat[3]));
+    transforms.push(transform);
     const motionState = new Ammo.btDefaultMotionState(transform);
+    motionStates.push(motionState);
     const localInertia = vec(0, 0, 0);
     if (mass > 0) {
       collisionShape.calculateLocalInertia(mass, localInertia);
     }
     const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, collisionShape, localInertia);
+    constructionInfos.push(rbInfo);
     const rigidBody = new Ammo.btRigidBody(rbInfo);
+    rigidBodies.push(rigidBody);
     if (mass > 0) {
       rigidBody.setActivationState(4);
     }
@@ -31184,10 +32480,10 @@ var createPhysicsContext = /* @__PURE__ */ __name(({ Ammo, themeData, options, r
     return rigidBody;
   }, "createRigidBody");
   const setupPhysicsWorld = /* @__PURE__ */ __name(() => {
-    const collisionConfiguration = new Ammo.btDefaultCollisionConfiguration();
-    const broadphase = new Ammo.btDbvtBroadphase();
-    const solver = new Ammo.btSequentialImpulseConstraintSolver();
-    const dispatcher = new Ammo.btCollisionDispatcher(collisionConfiguration);
+    collisionConfiguration = new Ammo.btDefaultCollisionConfiguration();
+    broadphase = new Ammo.btDbvtBroadphase();
+    solver = new Ammo.btSequentialImpulseConstraintSolver();
+    dispatcher = new Ammo.btCollisionDispatcher(collisionConfiguration);
     const world = new Ammo.btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfiguration);
     world.setGravity(vec(0, -9.81 * config.gravity, 0));
     return world;
@@ -31198,9 +32494,13 @@ var createPhysicsContext = /* @__PURE__ */ __name(({ Ammo, themeData, options, r
     const transform = new Ammo.btTransform();
     transform.setIdentity();
     transform.setOrigin(vec(origin[0], origin[1], origin[2]));
+    transforms.push(transform);
     const motionState = new Ammo.btDefaultMotionState(transform);
+    motionStates.push(motionState);
     const info = new Ammo.btRigidBodyConstructionInfo(0, motionState, shape, localInertia);
+    constructionInfos.push(info);
     const body = new Ammo.btRigidBody(info);
+    rigidBodies.push(body);
     body.id = id;
     body.setFriction(config.friction);
     body.setRestitution(config.restitution);
@@ -31210,12 +32510,19 @@ var createPhysicsContext = /* @__PURE__ */ __name(({ Ammo, themeData, options, r
   const addBoxToWorld = /* @__PURE__ */ __name(() => {
     const size = config.size;
     const height = config.startingHeight + 10;
-    addBoxPart("box_bottom", [0, -0.5, 0], new Ammo.btBoxShape(vec(size * aspect, 1, size)));
-    addBoxPart("box_top", [0, height - 0.5, 0], new Ammo.btBoxShape(vec(size * aspect, 1, size)));
-    addBoxPart("box_wall_north", [0, 0, size / -2 - 0.5], new Ammo.btBoxShape(vec(size * aspect, height, 1)));
-    addBoxPart("box_wall_south", [0, 0, size / 2 + 0.5], new Ammo.btBoxShape(vec(size * aspect, height, 1)));
-    addBoxPart("box_wall_east", [size * aspect / -2 - 0.5, 0, 0], new Ammo.btBoxShape(vec(1, height, size)));
-    addBoxPart("box_wall_west", [size * aspect / 2 + 0.5, 0, 0], new Ammo.btBoxShape(vec(1, height, size)));
+    const boxBottom = new Ammo.btBoxShape(vec(size * aspect, 1, size));
+    const boxTop = new Ammo.btBoxShape(vec(size * aspect, 1, size));
+    const wallNorth = new Ammo.btBoxShape(vec(size * aspect, height, 1));
+    const wallSouth = new Ammo.btBoxShape(vec(size * aspect, height, 1));
+    const wallEast = new Ammo.btBoxShape(vec(1, height, size));
+    const wallWest = new Ammo.btBoxShape(vec(1, height, size));
+    collisionShapes.push(boxBottom, boxTop, wallNorth, wallSouth, wallEast, wallWest);
+    addBoxPart("box_bottom", [0, -0.5, 0], boxBottom);
+    addBoxPart("box_top", [0, height - 0.5, 0], boxTop);
+    addBoxPart("box_wall_north", [0, 0, size / -2 - 0.5], wallNorth);
+    addBoxPart("box_wall_south", [0, 0, size / 2 + 0.5], wallSouth);
+    addBoxPart("box_wall_east", [size * aspect / -2 - 0.5, 0, 0], wallEast);
+    addBoxPart("box_wall_west", [size * aspect / 2 + 0.5, 0, 0], wallWest);
   }, "addBoxToWorld");
   const rollDie = /* @__PURE__ */ __name((die) => {
     die.setLinearVelocity(vec(
@@ -31266,13 +32573,64 @@ var createPhysicsContext = /* @__PURE__ */ __name(({ Ammo, themeData, options, r
   }, "getTransform");
   setStartPosition();
   addBoxToWorld();
+  const cleanup = /* @__PURE__ */ __name(() => {
+    for (const body of rigidBodies) {
+      try {
+        physicsWorld.removeRigidBody(body);
+      } catch (e) {
+      }
+    }
+    for (const body of rigidBodies) {
+      try {
+        Ammo.destroy(body);
+      } catch (e) {
+      }
+    }
+    for (const ms of motionStates) {
+      try {
+        Ammo.destroy(ms);
+      } catch (e) {
+      }
+    }
+    for (const ci of constructionInfos) {
+      try {
+        Ammo.destroy(ci);
+      } catch (e) {
+      }
+    }
+    for (const t of transforms) {
+      try {
+        Ammo.destroy(t);
+      } catch (e) {
+      }
+    }
+    for (const shape of collisionShapes) {
+      try {
+        Ammo.destroy(shape);
+      } catch (e) {
+      }
+    }
+    try {
+      Ammo.destroy(physicsWorld);
+    } catch (e) {
+    }
+    try {
+      Ammo.destroy(collisionConfiguration);
+    } catch (e) {
+    }
+    try {
+      Ammo.destroy(tmpBtTrans);
+    } catch (e) {
+    }
+  }, "cleanup");
   return {
     Ammo,
     config,
     physicsWorld,
     addDie,
     getTransform,
-    vec
+    vec,
+    cleanup
   };
 }, "createPhysicsContext");
 var normalizeQuaternion = /* @__PURE__ */ __name((q) => {
@@ -31398,7 +32756,13 @@ var simulateRollWithLoaders = /* @__PURE__ */ __name(async ({
     getAmmo2(),
     loadThemeData2({ theme })
   ]);
-  const parsedNotation = parseRollNotation(notation, themeData.diceAvailable);
+  const parsedRoll = parseRollNotationInput(notation, themeData.diceAvailable, {
+    maxNotationLength: options.maxNotationLength,
+    maxDiceCount: options.maxDiceCount,
+    maxSides: options.maxSides,
+    maxRerollDepth: options.maxRerollDepth
+  });
+  const parsedNotation = parsedRoll.diceGroups;
   const { groups, rolls, renderDice } = buildRollData({ parsedNotation, themeData, theme, themeColor, delay: options.delay });
   const physics = createPhysicsContext({ Ammo, themeData, options, random });
   const stateById = new Map(renderDice.map((die) => [
@@ -31435,80 +32799,91 @@ var simulateRollWithLoaders = /* @__PURE__ */ __name(async ({
   }, "pushFrame");
   let elapsed = 0;
   let timedOut = false;
-  for (let frame = 0; frame < maxFrames; frame++) {
-    while (scheduledDice.length && scheduledDice[0].delayMs <= elapsed) {
-      const renderDie = scheduledDice.shift();
-      const body = physics.addDie(renderDie);
+  let rollResults;
+  let results;
+  let finalResult;
+  try {
+    for (let frame = 0; frame < maxFrames; frame++) {
+      while (scheduledDice.length && scheduledDice[0].delayMs <= elapsed) {
+        const renderDie = scheduledDice.shift();
+        const body = physics.addDie(renderDie);
+        const state = stateById.get(renderDie.id);
+        state.body = body;
+        activeBodies.push(body);
+      }
+      physics.physicsWorld.stepSimulation(dt / 1e3, 2, 1 / 90);
+      for (let i = activeBodies.length - 1; i >= 0; i--) {
+        const body = activeBodies[i];
+        const transform = physics.getTransform(body);
+        const state = stateById.get(body.id);
+        if (transform) {
+          state.position = transform.position;
+          state.quaternion = transform.quaternion;
+        }
+        const speed = body.getLinearVelocity().length();
+        const tilt = body.getAngularVelocity().length();
+        if (speed < 0.01 && tilt < 5e-3 || body.timeout < 0) {
+          state.asleep = true;
+          body.asleep = true;
+          body.setMassProps(0, physics.vec(0, 0, 0));
+          body.forceActivationState(3);
+          body.setLinearVelocity(physics.vec(0, 0, 0));
+          body.setAngularVelocity(physics.vec(0, 0, 0));
+          sleepingBodies.push(activeBodies.splice(i, 1)[0]);
+        } else {
+          body.timeout -= dt;
+        }
+      }
+      pushFrame();
+      if (!scheduledDice.length && activeBodies.length === 0 && sleepingBodies.length === renderDice.length) {
+        break;
+      }
+      elapsed += dt;
+      if (frame === maxFrames - 1) {
+        timedOut = true;
+      }
+    }
+    const valueByRenderId = /* @__PURE__ */ new Map();
+    renderDice.forEach((renderDie) => {
       const state = stateById.get(renderDie.id);
-      state.body = body;
-      activeBodies.push(body);
-    }
-    physics.physicsWorld.stepSimulation(dt / 1e3, 2, 1 / 90);
-    for (let i = activeBodies.length - 1; i >= 0; i--) {
-      const body = activeBodies[i];
-      const transform = physics.getTransform(body);
-      const state = stateById.get(body.id);
-      if (transform) {
-        state.position = transform.position;
-        state.quaternion = transform.quaternion;
+      valueByRenderId.set(renderDie.id, resolveDieValue({ renderDie, state, themeData }));
+    });
+    rollResults = rolls.map((roll) => {
+      let value = valueByRenderId.get(roll.id);
+      if (roll.sides === 100 && roll.data !== "single") {
+        value += valueByRenderId.get(roll.id + 1e4);
       }
-      const speed = body.getLinearVelocity().length();
-      const tilt = body.getAngularVelocity().length();
-      if (speed < 0.01 && tilt < 5e-3 || body.timeout < 0) {
-        state.asleep = true;
-        body.asleep = true;
-        body.setMassProps(0, physics.vec(0, 0, 0));
-        body.forceActivationState(3);
-        body.setLinearVelocity(physics.vec(0, 0, 0));
-        body.setAngularVelocity(physics.vec(0, 0, 0));
-        sleepingBodies.push(activeBodies.splice(i, 1)[0]);
-      } else {
-        body.timeout -= dt;
-      }
-    }
-    pushFrame();
-    if (!scheduledDice.length && activeBodies.length === 0 && sleepingBodies.length === renderDice.length) {
-      break;
-    }
-    elapsed += dt;
-    if (frame === maxFrames - 1) {
-      timedOut = true;
-    }
+      return {
+        ...roll,
+        value
+      };
+    });
+    results = groups.map((group) => {
+      const groupRolls = rollResults.filter((roll) => roll.groupId === group.id);
+      const value = groupRolls.reduce((total, roll) => total + roll.value, 0) + group.modifier;
+      return {
+        id: group.id,
+        qty: groupRolls.length,
+        sides: group.sides,
+        modifier: group.modifier,
+        notation: group.notation,
+        value,
+        rolls: groupRolls.map(({ collectionId, id, meshName, ...roll }) => roll)
+      };
+    });
+    finalResult = computeFinalResult(parsedRoll.parsedTree, results, {
+      originalNotation: parsedRoll.originalNotation || (Array.isArray(notation) ? notation.join(",") : String(notation)),
+      maxRerollDepth: options.maxRerollDepth
+    });
+  } finally {
+    physics.cleanup();
   }
-  const valueByRenderId = /* @__PURE__ */ new Map();
-  renderDice.forEach((renderDie) => {
-    const state = stateById.get(renderDie.id);
-    valueByRenderId.set(renderDie.id, resolveDieValue({ renderDie, state, themeData }));
-  });
-  const rollResults = rolls.map((roll) => {
-    let value = valueByRenderId.get(roll.id);
-    if (roll.sides === 100 && roll.data !== "single") {
-      value += valueByRenderId.get(roll.id + 1e4);
-    }
-    return {
-      ...roll,
-      value
-    };
-  });
-  const results = groups.map((group) => {
-    const groupRolls = rollResults.filter((roll) => roll.groupId === group.id);
-    const value = groupRolls.reduce((total, roll) => total + roll.value, 0) + group.modifier;
-    return {
-      id: group.id,
-      qty: groupRolls.length,
-      sides: group.sides,
-      modifier: group.modifier,
-      notation: group.notation,
-      value,
-      rolls: groupRolls.map(({ collectionId, id, meshName, ...roll }) => roll)
-    };
-  });
   const frameData = new Float32Array(floats);
   const frameCount = frameData.length / (renderDice.length * frameStride);
   return {
     version: 1,
     metadata: {
-      notation: Array.isArray(notation) ? notation : String(notation),
+      notation: parsedRoll.originalNotation || (Array.isArray(notation) ? notation.join(",") : String(notation)),
       generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
       seed: seed === void 0 || seed === null || seed === "" ? null : String(seed),
       theme,
@@ -31523,6 +32898,7 @@ var simulateRollWithLoaders = /* @__PURE__ */ __name(async ({
         settleTimeout: options.settleTimeout
       },
       results,
+      finalResult,
       rolls: rollResults,
       renderDice: renderDice.map(({ delayMs, newStartPoint, ...die }) => die),
       frame: {

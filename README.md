@@ -14,12 +14,18 @@ The latest code running on AWS [Dice Box](https://d3rivgcgaqw1jo.cloudfront.net/
 
 ## Roll API Replay
 
-During local Vite dev or preview, `GET /api/roll?notation=2d20` runs the Ammo dice simulation server-side and returns compact replay JSON. Metadata stays as normal JSON, while animation frames are encoded as Float32Array bytes:
+During local Vite dev or preview, `GET /api/roll?notation=2d20kh1` runs the Ammo dice simulation server-side and returns compact replay JSON. Roll20-style notation is parsed before the physical roll, then the physical die results are fed back into the parser so `metadata.finalResult.value` reflects keep/drop, success counting, math, and group modifiers. Metadata stays as normal JSON, while animation frames are encoded as Float32Array bytes:
 
 ```json
 {
   "metadata": {
+    "notation": "2d20kh1",
     "results": [],
+    "finalResult": {
+      "value": 17,
+      "notation": "2d20kh1"
+    },
+    "rolls": [],
     "renderDice": [],
     "frame": {
       "type": "Float32Array",
@@ -39,7 +45,7 @@ Open `/api-replay.html` while the Vite server is running to fetch an API roll, p
 If you do not need a roll API, replace normal browser rolls with `rollTrace`. It runs the usual local Dice Box roll, captures the replay frames, and returns the same trace shape that `replay` accepts:
 
 ```javascript
-const trace = await box.rollTrace("2d20");
+const trace = await box.rollTrace("1d20 + 1d4 + 1d6+4");
 // save trace remotely in your own app
 
 await box.replay(trace);
@@ -50,7 +56,7 @@ Client code can fetch the same payload and store it wherever your app owns persi
 ```javascript
 import DiceBox from "@3d-dice/dice-box";
 
-const trace = await DiceBox.fetchRollTrace({ notation: "2d20" });
+const trace = await DiceBox.fetchRollTrace({ notation: "2d20kh1" });
 // save trace remotely in your own app
 
 const box = new DiceBox({ container: "#dice-box", assetPath: "/assets/dice-box/" });
@@ -63,7 +69,7 @@ Server-side code can create the same response shape without making an HTTP reque
 ```javascript
 import { simulateRoll } from "./server/index.js";
 
-const trace = await simulateRoll({ notation: "2d20" });
+const trace = await simulateRoll({ notation: "4d6dl1" });
 // save trace remotely in your own app
 ```
 
@@ -72,7 +78,7 @@ const trace = await simulateRoll({ notation: "2d20" });
 This repo includes a real Cloudflare Worker roll API at `workers/dice-roll/index.js`. It bundles the default dice collider data and the actual `ammo.wasm.wasm` physics engine, then serves the same trace JSON from:
 
 ```
-GET /api/roll?notation=2d20
+GET /api/roll?notation=2d20kh1
 ```
 
 Run it locally:
@@ -140,7 +146,7 @@ diceBox.init().then(() => {
 
 ## Usage
 
-Dice-Box can only accept simple dice notations and a modifier such as `2d20` or `2d6+4` It returns a result object once the dice have stopped rolling. For more advanced rolling features you'll want to look at adding [dice-parser-interface](https://github.com/3d-dice/dice-parser-interface) which supports the full [Roll20 Dice Specification](https://help.roll20.net/hc/en-us/articles/360037773133-Dice-Reference#DiceReference-RollTemplates).
+Dice-Box accepts simple dice notation and common Roll20-style notation through the normal `roll()`, `rollTrace()`, and `/api/roll` paths. Examples include `2d20kh1`, `2d20kl1`, `4d6dl1`, `5d10>8`, `{2d6,3d6}kh1`, and expressions like `1d20 + 1d4 + 1d6+4`. Reroll and explode notation such as `6d6!` or `2d12r1` is rejected with a clear replay API error until it can be represented as a continuous replay.
 
 ### Configuration Options
 See [Configuration Options](https://fantasticdice.games/docs/usage/config#configuration-options) on the docs site
