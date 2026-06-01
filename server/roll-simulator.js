@@ -13,6 +13,8 @@ const require = createRequire(import.meta.url)
 const ammoCache = new Map()
 const themeCache = new Map()
 let ammoFactoryPromise
+let ammoRequestCount = 0
+const AMMO_MAX_REQUESTS = 50
 
 const readJson = async filePath => JSON.parse(await fs.readFile(filePath, 'utf8'))
 
@@ -32,6 +34,11 @@ const loadAmmoFactory = async () => {
 
 const getAmmo = async (assetRoot = defaultAssetRoot) => {
 	const cacheKey = path.resolve(assetRoot)
+	if (ammoRequestCount >= AMMO_MAX_REQUESTS) {
+		ammoCache.delete(cacheKey)
+		ammoFactoryPromise = null
+		ammoRequestCount = 0
+	}
 	if (!ammoCache.has(cacheKey)) {
 		ammoCache.set(cacheKey, fs.readFile(path.join(cacheKey, 'ammo', 'ammo.wasm.wasm')).then(wasmBinary => {
 			return loadAmmoFactory().then(AmmoFactory => {
@@ -39,6 +46,7 @@ const getAmmo = async (assetRoot = defaultAssetRoot) => {
 			})
 		}))
 	}
+	ammoRequestCount++
 	return ammoCache.get(cacheKey)
 }
 
@@ -90,12 +98,18 @@ const loadThemeData = async ({ theme = 'default', assetRoot = defaultAssetRoot }
 	return themeData
 }
 
+let requestQueue = Promise.resolve()
+
 export const simulateRoll = async ({ assetRoot = defaultAssetRoot, ...options }) => {
-	return simulateRollWithLoaders({
+	const run = () => simulateRollWithLoaders({
 		...options,
 		getAmmo: () => getAmmo(assetRoot),
 		loadThemeData: ({ theme }) => loadThemeData({ theme, assetRoot }),
 	})
+
+	const result = requestQueue.then(run, run)
+	requestQueue = result.catch(() => {})
+	return result
 }
 
 export { parseRollNotation } from './roll-simulator-core.js'
