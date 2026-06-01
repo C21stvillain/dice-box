@@ -252,6 +252,16 @@ const createPhysicsContext = ({ Ammo, themeData, options, random }) => {
 
 	const vec = (x, y, z) => new Ammo.btVector3(x, y, z)
 
+	const rigidBodies = []
+	const collisionShapes = []
+	const motionStates = []
+	const constructionInfos = []
+	const transforms = []
+	let collisionConfiguration
+	let dispatcher
+	let broadphase
+	let solver
+
 	const setStartPosition = () => {
 		const edgeOffset = .5
 		const xMin = config.size * aspect / 2 - edgeOffset
@@ -277,6 +287,7 @@ const createPhysicsContext = ({ Ammo, themeData, options, random }) => {
 			convexMesh.addPoint(vec(mesh.positions[i], mesh.positions[i + 1], mesh.positions[i + 2]), true)
 		}
 		convexMesh.setLocalScaling(vec(mesh.scaling[0] * config.scale, mesh.scaling[1] * config.scale, mesh.scaling[2] * config.scale))
+		collisionShapes.push(convexMesh)
 		return convexMesh
 	}
 
@@ -306,14 +317,18 @@ const createPhysicsContext = ({ Ammo, themeData, options, random }) => {
 		transform.setIdentity()
 		transform.setOrigin(vec(pos[0], pos[1], pos[2]))
 		transform.setRotation(new Ammo.btQuaternion(quat[0], quat[1], quat[2], quat[3]))
+		transforms.push(transform)
 
 		const motionState = new Ammo.btDefaultMotionState(transform)
+		motionStates.push(motionState)
 		const localInertia = vec(0, 0, 0)
 		if (mass > 0) {
 			collisionShape.calculateLocalInertia(mass, localInertia)
 		}
 		const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, collisionShape, localInertia)
+		constructionInfos.push(rbInfo)
 		const rigidBody = new Ammo.btRigidBody(rbInfo)
+		rigidBodies.push(rigidBody)
 
 		if (mass > 0) {
 			rigidBody.setActivationState(4)
@@ -327,10 +342,10 @@ const createPhysicsContext = ({ Ammo, themeData, options, random }) => {
 	}
 
 	const setupPhysicsWorld = () => {
-		const collisionConfiguration = new Ammo.btDefaultCollisionConfiguration()
-		const broadphase = new Ammo.btDbvtBroadphase()
-		const solver = new Ammo.btSequentialImpulseConstraintSolver()
-		const dispatcher = new Ammo.btCollisionDispatcher(collisionConfiguration)
+		collisionConfiguration = new Ammo.btDefaultCollisionConfiguration()
+		broadphase = new Ammo.btDbvtBroadphase()
+		solver = new Ammo.btSequentialImpulseConstraintSolver()
+		dispatcher = new Ammo.btCollisionDispatcher(collisionConfiguration)
 		const world = new Ammo.btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfiguration)
 		world.setGravity(vec(0, -9.81 * config.gravity, 0))
 		return world
@@ -343,9 +358,13 @@ const createPhysicsContext = ({ Ammo, themeData, options, random }) => {
 		const transform = new Ammo.btTransform()
 		transform.setIdentity()
 		transform.setOrigin(vec(origin[0], origin[1], origin[2]))
+		transforms.push(transform)
 		const motionState = new Ammo.btDefaultMotionState(transform)
+		motionStates.push(motionState)
 		const info = new Ammo.btRigidBodyConstructionInfo(0, motionState, shape, localInertia)
+		constructionInfos.push(info)
 		const body = new Ammo.btRigidBody(info)
+		rigidBodies.push(body)
 		body.id = id
 		body.setFriction(config.friction)
 		body.setRestitution(config.restitution)
@@ -356,12 +375,19 @@ const createPhysicsContext = ({ Ammo, themeData, options, random }) => {
 	const addBoxToWorld = () => {
 		const size = config.size
 		const height = config.startingHeight + 10
-		addBoxPart('box_bottom', [0, -.5, 0], new Ammo.btBoxShape(vec(size * aspect, 1, size)))
-		addBoxPart('box_top', [0, height - .5, 0], new Ammo.btBoxShape(vec(size * aspect, 1, size)))
-		addBoxPart('box_wall_north', [0, 0, (size / -2) - .5], new Ammo.btBoxShape(vec(size * aspect, height, 1)))
-		addBoxPart('box_wall_south', [0, 0, (size / 2) + .5], new Ammo.btBoxShape(vec(size * aspect, height, 1)))
-		addBoxPart('box_wall_east', [(size * aspect / -2) - .5, 0, 0], new Ammo.btBoxShape(vec(1, height, size)))
-		addBoxPart('box_wall_west', [(size * aspect / 2) + .5, 0, 0], new Ammo.btBoxShape(vec(1, height, size)))
+		const boxBottom = new Ammo.btBoxShape(vec(size * aspect, 1, size))
+		const boxTop = new Ammo.btBoxShape(vec(size * aspect, 1, size))
+		const wallNorth = new Ammo.btBoxShape(vec(size * aspect, height, 1))
+		const wallSouth = new Ammo.btBoxShape(vec(size * aspect, height, 1))
+		const wallEast = new Ammo.btBoxShape(vec(1, height, size))
+		const wallWest = new Ammo.btBoxShape(vec(1, height, size))
+		collisionShapes.push(boxBottom, boxTop, wallNorth, wallSouth, wallEast, wallWest)
+		addBoxPart('box_bottom', [0, -.5, 0], boxBottom)
+		addBoxPart('box_top', [0, height - .5, 0], boxTop)
+		addBoxPart('box_wall_north', [0, 0, (size / -2) - .5], wallNorth)
+		addBoxPart('box_wall_south', [0, 0, (size / 2) + .5], wallSouth)
+		addBoxPart('box_wall_east', [(size * aspect / -2) - .5, 0, 0], wallEast)
+		addBoxPart('box_wall_west', [(size * aspect / 2) + .5, 0, 0], wallWest)
 	}
 
 	const rollDie = die => {
@@ -418,6 +444,30 @@ const createPhysicsContext = ({ Ammo, themeData, options, random }) => {
 	setStartPosition()
 	addBoxToWorld()
 
+	const cleanup = () => {
+		for (const body of rigidBodies) {
+			try { physicsWorld.removeRigidBody(body) } catch (e) {}
+		}
+		for (const body of rigidBodies) {
+			try { Ammo.destroy(body) } catch (e) {}
+		}
+		for (const ms of motionStates) {
+			try { Ammo.destroy(ms) } catch (e) {}
+		}
+		for (const ci of constructionInfos) {
+			try { Ammo.destroy(ci) } catch (e) {}
+		}
+		for (const t of transforms) {
+			try { Ammo.destroy(t) } catch (e) {}
+		}
+		for (const shape of collisionShapes) {
+			try { Ammo.destroy(shape) } catch (e) {}
+		}
+		try { Ammo.destroy(physicsWorld) } catch (e) {}
+		try { Ammo.destroy(collisionConfiguration) } catch (e) {}
+		try { Ammo.destroy(tmpBtTrans) } catch (e) {}
+	}
+
 	return {
 		Ammo,
 		config,
@@ -425,6 +475,7 @@ const createPhysicsContext = ({ Ammo, themeData, options, random }) => {
 		addDie,
 		getTransform,
 		vec,
+		cleanup,
 	}
 }
 
@@ -605,6 +656,9 @@ export const simulateRollWithLoaders = async ({
 
 	let elapsed = 0
 	let timedOut = false
+	let rollResults
+	let results
+	try {
 	for (let frame = 0; frame < maxFrames; frame++) {
 		while (scheduledDice.length && scheduledDice[0].delayMs <= elapsed) {
 			const renderDie = scheduledDice.shift()
@@ -657,7 +711,7 @@ export const simulateRollWithLoaders = async ({
 		valueByRenderId.set(renderDie.id, resolveDieValue({ renderDie, state, themeData }))
 	})
 
-	const rollResults = rolls.map(roll => {
+	rollResults = rolls.map(roll => {
 		let value = valueByRenderId.get(roll.id)
 		if (roll.sides === 100 && roll.data !== 'single') {
 			value += valueByRenderId.get(roll.id + 10000)
@@ -668,7 +722,7 @@ export const simulateRollWithLoaders = async ({
 		}
 	})
 
-	const results = groups.map(group => {
+	results = groups.map(group => {
 		const groupRolls = rollResults.filter(roll => roll.groupId === group.id)
 		const value = groupRolls.reduce((total, roll) => total + roll.value, 0) + group.modifier
 		return {
@@ -681,6 +735,9 @@ export const simulateRollWithLoaders = async ({
 			rolls: groupRolls.map(({ collectionId, id, meshName, ...roll }) => roll),
 		}
 	})
+	} finally {
+		physics.cleanup()
+	}
 
 	const frameData = new Float32Array(floats)
 	const frameCount = frameData.length / (renderDice.length * frameStride)
