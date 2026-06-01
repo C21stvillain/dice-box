@@ -32411,8 +32411,8 @@ var computeFinalResult = /* @__PURE__ */ __name((parsedTree, physicalResults, op
 
 // server/roll-simulator-core.js
 var defaultRollOptions = {
-  width: 800,
-  height: 600,
+  width: 1920,
+  height: 1080,
   frameRate: 60,
   size: 9.5,
   startingHeight: 8,

@@ -5,8 +5,8 @@ import {
 } from '../src/parser/roll20Adapter.js'
 
 export const defaultRollOptions = {
-	width: 800,
-	height: 600,
+	width: 1920,
+	height: 1080,
 	frameRate: 60,
 	size: 9.5,
 	startingHeight: 8,
