@@ -31748,6 +31748,16 @@ var RollNotationError = class extends Error {
     this.statusCode = statusCode;
   }
 };
+var PhysicalRollRequest = class extends Error {
+  static {
+    __name(this, "PhysicalRollRequest");
+  }
+  constructor(requestedRoll) {
+    super("Parser requested another physical die.");
+    this.name = "PhysicalRollRequest";
+    this.requestedRoll = requestedRoll;
+  }
+};
 var notationError = /* @__PURE__ */ __name((message) => new RollNotationError(message), "notationError");
 var toOptions = /* @__PURE__ */ __name((options) => ({
   ...defaultRoll20ParserOptions,
@@ -32048,7 +32058,7 @@ var parseAdvancedNotation = /* @__PURE__ */ __name((notation, options = {}) => {
     throw notationError(`Unsupported roll notation '${originalNotation}': unexpected trailing text '${parsedTree.label.trim()}'.`);
   }
   if (hasRerollingMods(parsedTree) && !parserOptions.allowRerollingMods) {
-    throw notationError(`Reroll/explode notation is not yet supported in the replay API. Maximum configured reroll/explode depth is ${parserOptions.maxRerollDepth}.`);
+    throw notationError(`Reroll/explode notation requires a roll path that can append extra physical dice. Use /api/roll or enable allowRerollingMods. Maximum configured reroll/explode depth is ${parserOptions.maxRerollDepth}.`);
   }
   const diceGroups = [];
   appendDiceGroups(parsedTree, diceGroups, parserOptions);
@@ -32075,7 +32085,12 @@ var legacyValidNumber = /* @__PURE__ */ __name((value, fallback, notationText) =
 }, "legacyValidNumber");
 var parseLegacySimpleNotation = /* @__PURE__ */ __name((input, diceAvailable = [], options = {}) => {
   const parserOptions = toOptions(options);
-  const notation = Array.isArray(input) ? input : String(input).split(",").map((part) => part.trim()).filter(Boolean);
+  const notationText = typeof input === "string" ? getNotationText(input) : null;
+  if (notationText) {
+    ensureNotationLength(notationText, parserOptions);
+    rejectUnresolvedAppTokens(notationText);
+  }
+  const notation = Array.isArray(input) ? input : notationText.split(",").map((part) => part.trim()).filter(Boolean);
   const parsedNotation = [];
   const percentNotation = /^(\d*)[dD](00|%)([+-]\d+)?$/i;
   const fudgeNotation = /^(\d*)[dD](f+[ate]*)([+-]\d+)?$/i;
@@ -32170,20 +32185,6 @@ var sidesFromRoll = /* @__PURE__ */ __name((roll) => {
   }
   throw notationError("Unable to determine die sides from physical roll results.");
 }, "sidesFromRoll");
-var valueToParserRandom = /* @__PURE__ */ __name((roll) => {
-  const value = Number(roll.value);
-  const sides = sidesFromRoll(roll);
-  if (sides === "fate") {
-    if (![-1, 0, 1].includes(value)) {
-      throw notationError(`Invalid fate die result '${roll.value}'.`);
-    }
-    return value === -1 ? 0 : value === 0 ? 1 / 3 : 2 / 3;
-  }
-  if (!Number.isInteger(value) || value < 1 || value > sides) {
-    throw notationError(`Invalid d${sides} physical result '${roll.value}'.`);
-  }
-  return (value - 1) / sides;
-}, "valueToParserRandom");
 var flattenPhysicalRolls = /* @__PURE__ */ __name((physicalResults) => {
   if (!Array.isArray(physicalResults)) {
     return [];
@@ -32195,6 +32196,187 @@ var flattenPhysicalRolls = /* @__PURE__ */ __name((physicalResults) => {
     return group?.value !== void 0 ? [group] : [];
   });
 }, "flattenPhysicalRolls");
+var createParserDieRoll = /* @__PURE__ */ __name(({ sides, order, physicalRollIndex, value }) => ({
+  critical: value === sides ? "success" : value === 1 ? "failure" : null,
+  die: sides,
+  matched: false,
+  order,
+  physicalRollIndex,
+  roll: value,
+  success: null,
+  successes: 0,
+  failures: 0,
+  type: "roll",
+  valid: true,
+  value
+}), "createParserDieRoll");
+var createParserFateRoll = /* @__PURE__ */ __name(({ order, physicalRollIndex, value }) => ({
+  matched: false,
+  order,
+  physicalRollIndex,
+  roll: value,
+  success: null,
+  successes: 0,
+  failures: 0,
+  type: "fateroll",
+  valid: true,
+  value
+}), "createParserFateRoll");
+var collectParserRolls = /* @__PURE__ */ __name((node, rolls = []) => {
+  if (!isObject(node)) {
+    return rolls;
+  }
+  if ((node.type === "roll" || node.type === "fateroll") && Number.isInteger(node.physicalRollIndex)) {
+    rolls.push(node);
+  }
+  Object.values(node).forEach((value) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => collectParserRolls(item, rolls));
+    } else if (isObject(value)) {
+      collectParserRolls(value, rolls);
+    }
+  });
+  return rolls;
+}, "collectParserRolls");
+var createPhysicalRollParserMetadata = /* @__PURE__ */ __name((parserRoll) => {
+  const {
+    critical,
+    drop,
+    explode,
+    failures,
+    matched,
+    order,
+    physicalRollIndex,
+    reroll,
+    success,
+    successes,
+    valid,
+    value
+  } = parserRoll;
+  return {
+    critical: critical ?? null,
+    drop: !!drop,
+    explode: !!explode,
+    failures: failures || 0,
+    matched: !!matched,
+    order,
+    physicalRollIndex,
+    reroll: !!reroll,
+    success: success ?? null,
+    successes: successes || 0,
+    valid: valid !== false,
+    value
+  };
+}, "createPhysicalRollParserMetadata");
+var createFoldedRollParserMetadata = /* @__PURE__ */ __name((physicalRoll, physicalRollIndex) => ({
+  critical: null,
+  consumed: true,
+  drop: false,
+  explode: false,
+  failures: 0,
+  folded: true,
+  matched: false,
+  order: null,
+  physicalRollIndex,
+  reroll: false,
+  success: null,
+  successes: 0,
+  valid: false,
+  value: Number(physicalRoll.value)
+}), "createFoldedRollParserMetadata");
+var annotatePhysicalResults = /* @__PURE__ */ __name((physicalResults, parserResult, consumed) => {
+  const physicalRolls = flattenPhysicalRolls(physicalResults);
+  const parserRolls = collectParserRolls(parserResult);
+  const annotatedIndexes = /* @__PURE__ */ new Set();
+  parserRolls.forEach((parserRoll) => {
+    const physicalRoll = physicalRolls[parserRoll.physicalRollIndex];
+    if (!physicalRoll) {
+      return;
+    }
+    annotatedIndexes.add(parserRoll.physicalRollIndex);
+    Object.assign(physicalRoll, {
+      parser: createPhysicalRollParserMetadata(parserRoll)
+    });
+  });
+  for (let physicalRollIndex = 0; physicalRollIndex < consumed; physicalRollIndex++) {
+    if (annotatedIndexes.has(physicalRollIndex)) {
+      continue;
+    }
+    const physicalRoll = physicalRolls[physicalRollIndex];
+    if (!physicalRoll) {
+      continue;
+    }
+    physicalRoll.parser = createFoldedRollParserMetadata(physicalRoll, physicalRollIndex);
+  }
+  return parserRolls;
+}, "annotatePhysicalResults");
+var runParserWithPhysicalRolls = /* @__PURE__ */ __name((parsedTree, physicalResults, options = {}) => {
+  const parserOptions = toOptions(options);
+  const physicalRolls = flattenPhysicalRolls(physicalResults);
+  let index = 0;
+  const roller = new DiceRoller(null, parserOptions.maxRerollDepth);
+  roller.generateDiceRoll = (sides, order) => {
+    const physicalRoll = physicalRolls[index];
+    if (!physicalRoll) {
+      throw new PhysicalRollRequest({ sides, qty: 1 });
+    }
+    const physicalSides = sidesFromRoll(physicalRoll);
+    if (physicalSides !== sides) {
+      throw notationError(`Physical roll d${physicalSides} did not match parser-requested d${sides}.`);
+    }
+    const value = Number(physicalRoll.value);
+    if (!Number.isInteger(value) || value < 1 || value > sides) {
+      throw notationError(`Invalid d${sides} physical result '${physicalRoll.value}'.`);
+    }
+    return createParserDieRoll({
+      sides,
+      order,
+      physicalRollIndex: index++,
+      value
+    });
+  };
+  roller.generateFateRoll = (order) => {
+    const physicalRoll = physicalRolls[index];
+    if (!physicalRoll) {
+      throw new PhysicalRollRequest({ sides: "fate", qty: 1 });
+    }
+    const physicalSides = sidesFromRoll(physicalRoll);
+    if (physicalSides !== "fate") {
+      throw notationError(`Physical roll d${physicalSides} did not match parser-requested fate die.`);
+    }
+    const value = Number(physicalRoll.value);
+    if (![-1, 0, 1].includes(value)) {
+      throw notationError(`Invalid fate die result '${physicalRoll.value}'.`);
+    }
+    return createParserFateRoll({
+      order,
+      physicalRollIndex: index++,
+      value
+    });
+  };
+  try {
+    const result = roller.rollParsed(parsedTree);
+    if (!options.allowUnusedPhysicalRolls && index !== physicalRolls.length) {
+      throw notationError("Physical roll results did not match parsed dice notation.");
+    }
+    const parserRolls = annotatePhysicalResults(physicalResults, result, index);
+    return {
+      complete: true,
+      consumed: index,
+      result,
+      parserRolls
+    };
+  } catch (error) {
+    if (error instanceof PhysicalRollRequest) {
+      return {
+        complete: false,
+        consumed: index,
+        requestedRoll: error.requestedRoll
+      };
+    }
+    throw error;
+  }
+}, "runParserWithPhysicalRolls");
 var computeFinalResult = /* @__PURE__ */ __name((parsedTree, physicalResults, options = {}) => {
   const parserOptions = toOptions(options);
   const notation = options.originalNotation || options.notation || "";
@@ -32209,18 +32391,12 @@ var computeFinalResult = /* @__PURE__ */ __name((parsedTree, physicalResults, op
       failures: 0
     };
   }
-  const physicalRolls = flattenPhysicalRolls(physicalResults);
-  let index = 0;
-  const roller = new DiceRoller(() => {
-    if (!physicalRolls[index]) {
-      throw notationError("Parser requested more dice than were physically rolled.");
-    }
-    return valueToParserRandom(physicalRolls[index++]);
-  }, parserOptions.maxRerollDepth);
-  const result = roller.rollParsed(parsedTree);
-  if (index !== physicalRolls.length) {
-    throw notationError("Physical roll results did not match parsed dice notation.");
+  const parserRun = runParserWithPhysicalRolls(parsedTree, physicalResults, parserOptions);
+  if (!parserRun.complete) {
+    const requested = parserRun.requestedRoll.sides === "fate" ? "fate die" : `d${parserRun.requestedRoll.sides}`;
+    throw notationError(`Parser requested another physical ${requested}.`);
   }
+  const result = parserRun.result;
   return {
     value: result.value,
     notation,
@@ -32228,6 +32404,7 @@ var computeFinalResult = /* @__PURE__ */ __name((parsedTree, physicalResults, op
     success: result.success ?? null,
     successes: result.successes || 0,
     failures: result.failures || 0,
+    rolls: cloneForMetadata(parserRun.parserRolls),
     details: cloneForMetadata(result)
   };
 }, "computeFinalResult");
@@ -32381,6 +32558,65 @@ var buildRollData = /* @__PURE__ */ __name(({ parsedNotation, themeData, theme, 
   });
   return { groups, rolls, renderDice };
 }, "buildRollData");
+var appendRequestedRollData = /* @__PURE__ */ __name(({ requestedRoll, groups, rolls, renderDice, themeData, theme, themeColor, delay, elapsed }) => {
+  const groupId = groups.length;
+  const rollId = rolls.length;
+  const id = rolls.length;
+  const sides = requestedRoll.sides === "fate" ? "fate" : requestedRoll.sides;
+  const dieType = normalizeDieType(sides);
+  const colorSuffix = getColorSuffix(themeData, themeColor);
+  if (!themeData.diceAvailable.includes(dieType)) {
+    throw new Error(`${dieType} is not available in theme '${theme}'.`);
+  }
+  const group = {
+    id: groupId,
+    qty: 1,
+    sides,
+    modifier: 0,
+    notation: requestedRoll.sides === "fate" ? "1dF" : `1d${requestedRoll.sides}`,
+    reroll: true,
+    rolls: []
+  };
+  const roll = {
+    sides,
+    data: void 0,
+    dieType,
+    groupId,
+    collectionId: 0,
+    rollId,
+    id,
+    theme,
+    themeColor,
+    meshName: themeData.meshName,
+    reroll: true
+  };
+  rolls.push(roll);
+  group.rolls.push(roll);
+  groups.push(group);
+  renderDice.push({
+    ...roll,
+    auxiliary: false,
+    resultRollId: rollId,
+    colorSuffix,
+    delayMs: elapsed + delay,
+    newStartPoint: true
+  });
+  if (sides === 100) {
+    renderDice.push({
+      ...roll,
+      id: id + 1e4,
+      sides: 10,
+      dieType: "d10",
+      auxiliary: true,
+      auxiliaryType: "d100-ones",
+      resultRollId: rollId,
+      colorSuffix,
+      delayMs: elapsed + delay,
+      newStartPoint: false
+    });
+  }
+  return group;
+}, "appendRequestedRollData");
 var computeGravity = /* @__PURE__ */ __name((gravity = defaultRollOptions.gravity, mass = defaultRollOptions.mass) => gravity === 0 ? 0 : gravity + mass / 3, "computeGravity");
 var computeMass = /* @__PURE__ */ __name((mass = defaultRollOptions.mass) => 1 + mass / 3, "computeMass");
 var computeSpin = /* @__PURE__ */ __name((spin = defaultRollOptions.spinForce, spinScale = 40) => spin / spinScale, "computeSpin");
@@ -32760,32 +32996,43 @@ var simulateRollWithLoaders = /* @__PURE__ */ __name(async ({
     maxNotationLength: options.maxNotationLength,
     maxDiceCount: options.maxDiceCount,
     maxSides: options.maxSides,
-    maxRerollDepth: options.maxRerollDepth
+    maxRerollDepth: options.maxRerollDepth,
+    allowRerollingMods: true
   });
   const parsedNotation = parsedRoll.diceGroups;
   const { groups, rolls, renderDice } = buildRollData({ parsedNotation, themeData, theme, themeColor, delay: options.delay });
   const physics = createPhysicsContext({ Ammo, themeData, options, random });
-  const stateById = new Map(renderDice.map((die) => [
-    die.id,
-    {
-      id: die.id,
-      position: [0, -100, 0],
-      quaternion: [0, 0, 0, 1],
-      body: null,
-      asleep: false
+  const stateById = /* @__PURE__ */ new Map();
+  const ensureState = /* @__PURE__ */ __name((die) => {
+    if (!stateById.has(die.id)) {
+      stateById.set(die.id, {
+        id: die.id,
+        position: [0, -100, 0],
+        quaternion: [0, 0, 0, 1],
+        body: null,
+        asleep: false
+      });
     }
-  ]));
-  const scheduledDice = [...renderDice].sort((a, b) => a.delayMs - b.delayMs);
+  }, "ensureState");
+  renderDice.forEach(ensureState);
+  const scheduledDice = [];
+  const scheduleDie = /* @__PURE__ */ __name((die) => {
+    ensureState(die);
+    scheduledDice.push(die);
+    scheduledDice.sort((a, b) => a.delayMs - b.delayMs);
+  }, "scheduleDie");
+  renderDice.forEach(scheduleDie);
   const activeBodies = [];
   const sleepingBodies = [];
-  const floats = [];
+  const frameRows = [];
   const frameStride = 8;
   const dt = 1e3 / options.frameRate;
   const maxFrames = Math.ceil(options.maxDurationMs / dt);
   const pushFrame = /* @__PURE__ */ __name(() => {
+    const row = /* @__PURE__ */ new Map();
     renderDice.forEach((die) => {
       const state = stateById.get(die.id);
-      floats.push(
+      row.set(die.id, [
         die.id,
         state.position[0],
         state.position[1],
@@ -32794,14 +33041,70 @@ var simulateRollWithLoaders = /* @__PURE__ */ __name(async ({
         state.quaternion[1],
         state.quaternion[2],
         state.quaternion[3]
-      );
+      ]);
     });
+    frameRows.push(row);
   }, "pushFrame");
+  const materializeResults = /* @__PURE__ */ __name(() => {
+    const valueByRenderId = /* @__PURE__ */ new Map();
+    renderDice.forEach((renderDie) => {
+      const state = stateById.get(renderDie.id);
+      valueByRenderId.set(renderDie.id, resolveDieValue({ renderDie, state, themeData }));
+    });
+    rollResults = rolls.map((roll) => {
+      let value = valueByRenderId.get(roll.id);
+      if (roll.sides === 100 && roll.data !== "single") {
+        value += valueByRenderId.get(roll.id + 1e4);
+      }
+      return {
+        ...roll,
+        value
+      };
+    });
+    results = groups.map((group) => {
+      const groupRolls = rollResults.filter((roll) => roll.groupId === group.id);
+      const value = groupRolls.reduce((total, roll) => total + roll.value, 0) + group.modifier;
+      return {
+        id: group.id,
+        qty: groupRolls.length,
+        sides: group.sides,
+        modifier: group.modifier,
+        notation: group.notation,
+        reroll: !!group.reroll,
+        value,
+        rolls: groupRolls.map(({ collectionId, id, meshName, ...roll }) => roll)
+      };
+    });
+  }, "materializeResults");
+  const flattenFrameRows = /* @__PURE__ */ __name(() => {
+    const floats = [];
+    const lastState = /* @__PURE__ */ new Map();
+    const offscreenState = /* @__PURE__ */ __name((die) => [
+      die.id,
+      0,
+      -100,
+      0,
+      0,
+      0,
+      0,
+      1
+    ], "offscreenState");
+    frameRows.forEach((row) => {
+      renderDice.forEach((die) => {
+        const state = row.get(die.id) || lastState.get(die.id) || offscreenState(die);
+        lastState.set(die.id, state);
+        floats.push(...state);
+      });
+    });
+    return new Float32Array(floats);
+  }, "flattenFrameRows");
   let elapsed = 0;
   let timedOut = false;
   let rollResults;
   let results;
   let finalResult;
+  let rerollCount = 0;
+  let complete = false;
   try {
     for (let frame = 0; frame < maxFrames; frame++) {
       while (scheduledDice.length && scheduledDice[0].delayMs <= elapsed) {
@@ -32836,50 +33139,67 @@ var simulateRollWithLoaders = /* @__PURE__ */ __name(async ({
       }
       pushFrame();
       if (!scheduledDice.length && activeBodies.length === 0 && sleepingBodies.length === renderDice.length) {
-        break;
+        materializeResults();
+        const parserRun = parsedRoll.parsedTree ? runParserWithPhysicalRolls(parsedRoll.parsedTree, results, {
+          maxRerollDepth: options.maxRerollDepth
+        }) : { complete: true };
+        if (parserRun.complete) {
+          finalResult = computeFinalResult(parsedRoll.parsedTree, results, {
+            originalNotation: parsedRoll.originalNotation || (Array.isArray(notation) ? notation.join(",") : String(notation)),
+            maxRerollDepth: options.maxRerollDepth
+          });
+          complete = true;
+          break;
+        }
+        if (rerollCount >= options.maxRerollDepth) {
+          throw new Error(`Roll notation exceeded the maximum reroll/explode depth of ${options.maxRerollDepth}.`);
+        }
+        if (rolls.length + 1 > options.maxDiceCount) {
+          throw new Error(`Roll notation requests more than the maximum dice count of ${options.maxDiceCount}.`);
+        }
+        const previousRenderDiceCount = renderDice.length;
+        appendRequestedRollData({
+          requestedRoll: parserRun.requestedRoll,
+          groups,
+          rolls,
+          renderDice,
+          themeData,
+          theme,
+          themeColor,
+          delay: options.delay,
+          elapsed
+        });
+        renderDice.slice(previousRenderDiceCount).forEach(scheduleDie);
+        rerollCount++;
       }
       elapsed += dt;
       if (frame === maxFrames - 1) {
         timedOut = true;
       }
     }
-    const valueByRenderId = /* @__PURE__ */ new Map();
-    renderDice.forEach((renderDie) => {
-      const state = stateById.get(renderDie.id);
-      valueByRenderId.set(renderDie.id, resolveDieValue({ renderDie, state, themeData }));
-    });
-    rollResults = rolls.map((roll) => {
-      let value = valueByRenderId.get(roll.id);
-      if (roll.sides === 100 && roll.data !== "single") {
-        value += valueByRenderId.get(roll.id + 1e4);
-      }
-      return {
-        ...roll,
-        value
-      };
-    });
-    results = groups.map((group) => {
-      const groupRolls = rollResults.filter((roll) => roll.groupId === group.id);
-      const value = groupRolls.reduce((total, roll) => total + roll.value, 0) + group.modifier;
-      return {
-        id: group.id,
-        qty: groupRolls.length,
-        sides: group.sides,
-        modifier: group.modifier,
-        notation: group.notation,
-        value,
-        rolls: groupRolls.map(({ collectionId, id, meshName, ...roll }) => roll)
-      };
-    });
-    finalResult = computeFinalResult(parsedRoll.parsedTree, results, {
-      originalNotation: parsedRoll.originalNotation || (Array.isArray(notation) ? notation.join(",") : String(notation)),
-      maxRerollDepth: options.maxRerollDepth
-    });
+    if (!complete && !timedOut) {
+      materializeResults();
+      finalResult = computeFinalResult(parsedRoll.parsedTree, results, {
+        originalNotation: parsedRoll.originalNotation || (Array.isArray(notation) ? notation.join(",") : String(notation)),
+        maxRerollDepth: options.maxRerollDepth
+      });
+      complete = true;
+    }
   } finally {
     physics.cleanup();
   }
-  const frameData = new Float32Array(floats);
-  const frameCount = frameData.length / (renderDice.length * frameStride);
+  if (!complete && !finalResult) {
+    timedOut = true;
+    if (results) {
+      finalResult = computeFinalResult(parsedRoll.parsedTree, results, {
+        originalNotation: parsedRoll.originalNotation || (Array.isArray(notation) ? notation.join(",") : String(notation)),
+        maxRerollDepth: options.maxRerollDepth
+      });
+    }
+  }
+  const frameData = flattenFrameRows();
+  const frameCount = renderDice.length ? frameData.length / (renderDice.length * frameStride) : 0;
+  const flattenedRolls = results?.flatMap((group) => group.rolls || []) || [];
   return {
     version: 1,
     metadata: {
@@ -32899,7 +33219,7 @@ var simulateRollWithLoaders = /* @__PURE__ */ __name(async ({
       },
       results,
       finalResult,
-      rolls: rollResults,
+      rolls: flattenedRolls,
       renderDice: renderDice.map(({ delayMs, newStartPoint, ...die }) => die),
       frame: {
         type: "Float32Array",

@@ -20,6 +20,14 @@ export class RollNotationError extends Error {
 	}
 }
 
+export class PhysicalRollRequest extends Error {
+	constructor(requestedRoll) {
+		super('Parser requested another physical die.')
+		this.name = 'PhysicalRollRequest'
+		this.requestedRoll = requestedRoll
+	}
+}
+
 const notationError = message => new RollNotationError(message)
 
 const toOptions = options => ({
@@ -351,7 +359,7 @@ export const parseAdvancedNotation = (notation, options = {}) => {
 		throw notationError(`Unsupported roll notation '${originalNotation}': unexpected trailing text '${parsedTree.label.trim()}'.`)
 	}
 	if (hasRerollingMods(parsedTree) && !parserOptions.allowRerollingMods) {
-		throw notationError(`Reroll/explode notation is not yet supported in the replay API. Maximum configured reroll/explode depth is ${parserOptions.maxRerollDepth}.`)
+		throw notationError(`Reroll/explode notation requires a roll path that can append extra physical dice. Use /api/roll or enable allowRerollingMods. Maximum configured reroll/explode depth is ${parserOptions.maxRerollDepth}.`)
 	}
 
 	const diceGroups = []
@@ -382,9 +390,14 @@ const legacyValidNumber = (value, fallback, notationText) => {
 
 export const parseLegacySimpleNotation = (input, diceAvailable = [], options = {}) => {
 	const parserOptions = toOptions(options)
+	const notationText = typeof input === 'string' ? getNotationText(input) : null
+	if (notationText) {
+		ensureNotationLength(notationText, parserOptions)
+		rejectUnresolvedAppTokens(notationText)
+	}
 	const notation = Array.isArray(input)
 		? input
-		: String(input).split(',').map(part => part.trim()).filter(Boolean)
+		: notationText.split(',').map(part => part.trim()).filter(Boolean)
 
 	const parsedNotation = []
 	const percentNotation = /^(\d*)[dD](00|%)([+-]\d+)?$/i
@@ -495,23 +508,6 @@ const sidesFromRoll = roll => {
 	throw notationError('Unable to determine die sides from physical roll results.')
 }
 
-const valueToParserRandom = roll => {
-	const value = Number(roll.value)
-	const sides = sidesFromRoll(roll)
-
-	if (sides === 'fate') {
-		if (![ -1, 0, 1 ].includes(value)) {
-			throw notationError(`Invalid fate die result '${roll.value}'.`)
-		}
-		return value === -1 ? 0 : value === 0 ? 1 / 3 : 2 / 3
-	}
-
-	if (!Number.isInteger(value) || value < 1 || value > sides) {
-		throw notationError(`Invalid d${sides} physical result '${roll.value}'.`)
-	}
-	return (value - 1) / sides
-}
-
 export const flattenPhysicalRolls = physicalResults => {
 	if (!Array.isArray(physicalResults)) {
 		return []
@@ -522,6 +518,197 @@ export const flattenPhysicalRolls = physicalResults => {
 		}
 		return group?.value !== undefined ? [group] : []
 	})
+}
+
+const createParserDieRoll = ({ sides, order, physicalRollIndex, value }) => ({
+	critical: value === sides ? 'success' : value === 1 ? 'failure' : null,
+	die: sides,
+	matched: false,
+	order,
+	physicalRollIndex,
+	roll: value,
+	success: null,
+	successes: 0,
+	failures: 0,
+	type: 'roll',
+	valid: true,
+	value,
+})
+
+const createParserFateRoll = ({ order, physicalRollIndex, value }) => ({
+	matched: false,
+	order,
+	physicalRollIndex,
+	roll: value,
+	success: null,
+	successes: 0,
+	failures: 0,
+	type: 'fateroll',
+	valid: true,
+	value,
+})
+
+const collectParserRolls = (node, rolls = []) => {
+	if (!isObject(node)) {
+		return rolls
+	}
+	if ((node.type === 'roll' || node.type === 'fateroll') && Number.isInteger(node.physicalRollIndex)) {
+		rolls.push(node)
+	}
+	Object.values(node).forEach(value => {
+		if (Array.isArray(value)) {
+			value.forEach(item => collectParserRolls(item, rolls))
+		} else if (isObject(value)) {
+			collectParserRolls(value, rolls)
+		}
+	})
+	return rolls
+}
+
+const createPhysicalRollParserMetadata = parserRoll => {
+	const {
+		critical,
+		drop,
+		explode,
+		failures,
+		matched,
+		order,
+		physicalRollIndex,
+		reroll,
+		success,
+		successes,
+		valid,
+		value,
+	} = parserRoll
+	return {
+		critical: critical ?? null,
+		drop: !!drop,
+		explode: !!explode,
+		failures: failures || 0,
+		matched: !!matched,
+		order,
+		physicalRollIndex,
+		reroll: !!reroll,
+		success: success ?? null,
+		successes: successes || 0,
+		valid: valid !== false,
+		value,
+	}
+}
+
+const createFoldedRollParserMetadata = (physicalRoll, physicalRollIndex) => ({
+	critical: null,
+	consumed: true,
+	drop: false,
+	explode: false,
+	failures: 0,
+	folded: true,
+	matched: false,
+	order: null,
+	physicalRollIndex,
+	reroll: false,
+	success: null,
+	successes: 0,
+	valid: false,
+	value: Number(physicalRoll.value),
+})
+
+const annotatePhysicalResults = (physicalResults, parserResult, consumed) => {
+	const physicalRolls = flattenPhysicalRolls(physicalResults)
+	const parserRolls = collectParserRolls(parserResult)
+	const annotatedIndexes = new Set()
+	parserRolls.forEach(parserRoll => {
+		const physicalRoll = physicalRolls[parserRoll.physicalRollIndex]
+		if (!physicalRoll) {
+			return
+		}
+		annotatedIndexes.add(parserRoll.physicalRollIndex)
+		Object.assign(physicalRoll, {
+			parser: createPhysicalRollParserMetadata(parserRoll),
+		})
+	})
+	for (let physicalRollIndex = 0; physicalRollIndex < consumed; physicalRollIndex++) {
+		if (annotatedIndexes.has(physicalRollIndex)) {
+			continue
+		}
+		const physicalRoll = physicalRolls[physicalRollIndex]
+		if (!physicalRoll) {
+			continue
+		}
+		physicalRoll.parser = createFoldedRollParserMetadata(physicalRoll, physicalRollIndex)
+	}
+	return parserRolls
+}
+
+export const runParserWithPhysicalRolls = (parsedTree, physicalResults, options = {}) => {
+	const parserOptions = toOptions(options)
+	const physicalRolls = flattenPhysicalRolls(physicalResults)
+	let index = 0
+	const roller = new DiceRoller(null, parserOptions.maxRerollDepth)
+
+	roller.generateDiceRoll = (sides, order) => {
+		const physicalRoll = physicalRolls[index]
+		if (!physicalRoll) {
+			throw new PhysicalRollRequest({ sides, qty: 1 })
+		}
+		const physicalSides = sidesFromRoll(physicalRoll)
+		if (physicalSides !== sides) {
+			throw notationError(`Physical roll d${physicalSides} did not match parser-requested d${sides}.`)
+		}
+		const value = Number(physicalRoll.value)
+		if (!Number.isInteger(value) || value < 1 || value > sides) {
+			throw notationError(`Invalid d${sides} physical result '${physicalRoll.value}'.`)
+		}
+		return createParserDieRoll({
+			sides,
+			order,
+			physicalRollIndex: index++,
+			value,
+		})
+	}
+
+	roller.generateFateRoll = order => {
+		const physicalRoll = physicalRolls[index]
+		if (!physicalRoll) {
+			throw new PhysicalRollRequest({ sides: 'fate', qty: 1 })
+		}
+		const physicalSides = sidesFromRoll(physicalRoll)
+		if (physicalSides !== 'fate') {
+			throw notationError(`Physical roll d${physicalSides} did not match parser-requested fate die.`)
+		}
+		const value = Number(physicalRoll.value)
+		if (![ -1, 0, 1 ].includes(value)) {
+			throw notationError(`Invalid fate die result '${physicalRoll.value}'.`)
+		}
+		return createParserFateRoll({
+			order,
+			physicalRollIndex: index++,
+			value,
+		})
+	}
+
+	try {
+		const result = roller.rollParsed(parsedTree)
+		if (!options.allowUnusedPhysicalRolls && index !== physicalRolls.length) {
+			throw notationError('Physical roll results did not match parsed dice notation.')
+		}
+		const parserRolls = annotatePhysicalResults(physicalResults, result, index)
+		return {
+			complete: true,
+			consumed: index,
+			result,
+			parserRolls,
+		}
+	} catch (error) {
+		if (error instanceof PhysicalRollRequest) {
+			return {
+				complete: false,
+				consumed: index,
+				requestedRoll: error.requestedRoll,
+			}
+		}
+		throw error
+	}
 }
 
 export const computeFinalResult = (parsedTree, physicalResults, options = {}) => {
@@ -540,19 +727,14 @@ export const computeFinalResult = (parsedTree, physicalResults, options = {}) =>
 		}
 	}
 
-	const physicalRolls = flattenPhysicalRolls(physicalResults)
-	let index = 0
-	const roller = new DiceRoller(() => {
-		if (!physicalRolls[index]) {
-			throw notationError('Parser requested more dice than were physically rolled.')
-		}
-		return valueToParserRandom(physicalRolls[index++])
-	}, parserOptions.maxRerollDepth)
-
-	const result = roller.rollParsed(parsedTree)
-	if (index !== physicalRolls.length) {
-		throw notationError('Physical roll results did not match parsed dice notation.')
+	const parserRun = runParserWithPhysicalRolls(parsedTree, physicalResults, parserOptions)
+	if (!parserRun.complete) {
+		const requested = parserRun.requestedRoll.sides === 'fate'
+			? 'fate die'
+			: `d${parserRun.requestedRoll.sides}`
+		throw notationError(`Parser requested another physical ${requested}.`)
 	}
+	const result = parserRun.result
 
 	return {
 		value: result.value,
@@ -561,6 +743,7 @@ export const computeFinalResult = (parsedTree, physicalResults, options = {}) =>
 		success: result.success ?? null,
 		successes: result.successes || 0,
 		failures: result.failures || 0,
+		rolls: cloneForMetadata(parserRun.parserRolls),
 		details: cloneForMetadata(result),
 	}
 }

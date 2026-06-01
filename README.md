@@ -14,7 +14,7 @@ The latest code running on AWS [Dice Box](https://d3rivgcgaqw1jo.cloudfront.net/
 
 ## Roll API Replay
 
-During local Vite dev or preview, `GET /api/roll?notation=2d20kh1` runs the Ammo dice simulation server-side and returns compact replay JSON. Roll20-style notation is parsed before the physical roll, then the physical die results are fed back into the parser so `metadata.finalResult.value` reflects keep/drop, success counting, math, and group modifiers. Metadata stays as normal JSON, while animation frames are encoded as Float32Array bytes:
+During local Vite dev or preview, `GET /api/roll?notation=2d20kh1` runs the Ammo dice simulation server-side and returns compact replay JSON. Roll20-style notation is parsed before the physical roll, then the physical die results are fed back into the parser so `metadata.finalResult.value` reflects keep/drop, success counting, sort order, match flags, rerolls, explosions, math, and group modifiers. Metadata stays as normal JSON, while animation frames are encoded as Float32Array bytes:
 
 ```json
 {
@@ -146,7 +146,7 @@ diceBox.init().then(() => {
 
 ## Usage
 
-Dice-Box accepts simple dice notation and common Roll20-style notation through the normal `roll()`, `rollTrace()`, and `/api/roll` paths. Examples include `2d20kh1`, `2d20kl1`, `4d6dl1`, `5d10>8`, `{2d6,3d6}kh1`, and expressions like `1d20 + 1d4 + 1d6+4`. Reroll and explode notation such as `6d6!` or `2d12r1` is rejected with a clear replay API error until it can be represented as a continuous replay.
+Dice-Box accepts simple dice notation and common Roll20-style notation through the normal `roll()`, `rollTrace()`, and `/api/roll` paths. Examples include `2d20kh1`, `2d20kl1`, `4d6dl1`, `5d10>8`, `10d6sa`, `20d6m`, `{2d6,3d6}kh1`, and expressions like `1d20 + 1d4 + 1d6+4`. The `/api/roll` replay endpoint also supports reroll and explode notation such as `6d6!`, `6d6!!`, `6d6!p`, `2d12r1`, and `2d12ro1` by appending the extra physical dice to the replay trace up to the configured safety limits.
 
 ### Configuration Options
 See [Configuration Options](https://fantasticdice.games/docs/usage/config#configuration-options) on the docs site

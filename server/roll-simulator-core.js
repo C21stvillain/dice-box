@@ -1,6 +1,7 @@
 import {
 	computeFinalResult,
 	parseRollNotationInput,
+	runParserWithPhysicalRolls,
 } from '../src/parser/roll20Adapter.js'
 
 export const defaultRollOptions = {
@@ -173,6 +174,72 @@ const buildRollData = ({ parsedNotation, themeData, theme, themeColor, delay }) 
 	})
 
 	return { groups, rolls, renderDice }
+}
+
+const appendRequestedRollData = ({ requestedRoll, groups, rolls, renderDice, themeData, theme, themeColor, delay, elapsed }) => {
+	const groupId = groups.length
+	const rollId = rolls.length
+	const id = rolls.length
+	const sides = requestedRoll.sides === 'fate' ? 'fate' : requestedRoll.sides
+	const dieType = normalizeDieType(sides)
+	const colorSuffix = getColorSuffix(themeData, themeColor)
+
+	if (!themeData.diceAvailable.includes(dieType)) {
+		throw new Error(`${dieType} is not available in theme '${theme}'.`)
+	}
+
+	const group = {
+		id: groupId,
+		qty: 1,
+		sides,
+		modifier: 0,
+		notation: requestedRoll.sides === 'fate' ? '1dF' : `1d${requestedRoll.sides}`,
+		reroll: true,
+		rolls: [],
+	}
+	const roll = {
+		sides,
+		data: undefined,
+		dieType,
+		groupId,
+		collectionId: 0,
+		rollId,
+		id,
+		theme,
+		themeColor,
+		meshName: themeData.meshName,
+		reroll: true,
+	}
+
+	rolls.push(roll)
+	group.rolls.push(roll)
+	groups.push(group)
+
+	renderDice.push({
+		...roll,
+		auxiliary: false,
+		resultRollId: rollId,
+		colorSuffix,
+		delayMs: elapsed + delay,
+		newStartPoint: true,
+	})
+
+	if (sides === 100) {
+		renderDice.push({
+			...roll,
+			id: id + 10000,
+			sides: 10,
+			dieType: 'd10',
+			auxiliary: true,
+			auxiliaryType: 'd100-ones',
+			resultRollId: rollId,
+			colorSuffix,
+			delayMs: elapsed + delay,
+			newStartPoint: false,
+		})
+	}
+
+	return group
 }
 
 const computeGravity = (gravity = defaultRollOptions.gravity, mass = defaultRollOptions.mass) => gravity === 0 ? 0 : gravity + mass / 3
@@ -567,32 +634,43 @@ export const simulateRollWithLoaders = async ({
 		maxDiceCount: options.maxDiceCount,
 		maxSides: options.maxSides,
 		maxRerollDepth: options.maxRerollDepth,
+		allowRerollingMods: true,
 	})
 	const parsedNotation = parsedRoll.diceGroups
 	const { groups, rolls, renderDice } = buildRollData({ parsedNotation, themeData, theme, themeColor, delay: options.delay })
 	const physics = createPhysicsContext({ Ammo, themeData, options, random })
-	const stateById = new Map(renderDice.map(die => [
-		die.id,
-		{
-			id: die.id,
-			position: [0, -100, 0],
-			quaternion: [0, 0, 0, 1],
-			body: null,
-			asleep: false,
-		},
-	]))
-	const scheduledDice = [...renderDice].sort((a, b) => a.delayMs - b.delayMs)
+	const stateById = new Map()
+	const ensureState = die => {
+		if (!stateById.has(die.id)) {
+			stateById.set(die.id, {
+				id: die.id,
+				position: [0, -100, 0],
+				quaternion: [0, 0, 0, 1],
+				body: null,
+				asleep: false,
+			})
+		}
+	}
+	renderDice.forEach(ensureState)
+	const scheduledDice = []
+	const scheduleDie = die => {
+		ensureState(die)
+		scheduledDice.push(die)
+		scheduledDice.sort((a, b) => a.delayMs - b.delayMs)
+	}
+	renderDice.forEach(scheduleDie)
 	const activeBodies = []
 	const sleepingBodies = []
-	const floats = []
+	const frameRows = []
 	const frameStride = 8
 	const dt = 1000 / options.frameRate
 	const maxFrames = Math.ceil(options.maxDurationMs / dt)
 
 	const pushFrame = () => {
+		const row = new Map()
 		renderDice.forEach(die => {
 			const state = stateById.get(die.id)
-			floats.push(
+			row.set(die.id, [
 				die.id,
 				state.position[0],
 				state.position[1],
@@ -601,8 +679,67 @@ export const simulateRollWithLoaders = async ({
 				state.quaternion[1],
 				state.quaternion[2],
 				state.quaternion[3],
-			)
+			])
 		})
+		frameRows.push(row)
+	}
+
+	const materializeResults = () => {
+		const valueByRenderId = new Map()
+		renderDice.forEach(renderDie => {
+			const state = stateById.get(renderDie.id)
+			valueByRenderId.set(renderDie.id, resolveDieValue({ renderDie, state, themeData }))
+		})
+
+		rollResults = rolls.map(roll => {
+			let value = valueByRenderId.get(roll.id)
+			if (roll.sides === 100 && roll.data !== 'single') {
+				value += valueByRenderId.get(roll.id + 10000)
+			}
+			return {
+				...roll,
+				value,
+			}
+		})
+
+		results = groups.map(group => {
+			const groupRolls = rollResults.filter(roll => roll.groupId === group.id)
+			const value = groupRolls.reduce((total, roll) => total + roll.value, 0) + group.modifier
+			return {
+				id: group.id,
+				qty: groupRolls.length,
+				sides: group.sides,
+				modifier: group.modifier,
+				notation: group.notation,
+				reroll: !!group.reroll,
+				value,
+				rolls: groupRolls.map(({ collectionId, id, meshName, ...roll }) => roll),
+			}
+		})
+	}
+
+	const flattenFrameRows = () => {
+		const floats = []
+		const lastState = new Map()
+		const offscreenState = die => [
+			die.id,
+			0,
+			-100,
+			0,
+			0,
+			0,
+			0,
+			1,
+		]
+
+		frameRows.forEach(row => {
+			renderDice.forEach(die => {
+				const state = row.get(die.id) || lastState.get(die.id) || offscreenState(die)
+				lastState.set(die.id, state)
+				floats.push(...state)
+			})
+		})
+		return new Float32Array(floats)
 	}
 
 	let elapsed = 0
@@ -610,93 +747,114 @@ export const simulateRollWithLoaders = async ({
 	let rollResults
 	let results
 	let finalResult
+	let rerollCount = 0
+	let complete = false
 	try {
-	for (let frame = 0; frame < maxFrames; frame++) {
-		while (scheduledDice.length && scheduledDice[0].delayMs <= elapsed) {
-			const renderDie = scheduledDice.shift()
-			const body = physics.addDie(renderDie)
-			const state = stateById.get(renderDie.id)
-			state.body = body
-			activeBodies.push(body)
-		}
-
-		physics.physicsWorld.stepSimulation(dt / 1000, 2, 1 / 90)
-
-		for (let i = activeBodies.length - 1; i >= 0; i--) {
-			const body = activeBodies[i]
-			const transform = physics.getTransform(body)
-			const state = stateById.get(body.id)
-			if (transform) {
-				state.position = transform.position
-				state.quaternion = transform.quaternion
+		for (let frame = 0; frame < maxFrames; frame++) {
+			while (scheduledDice.length && scheduledDice[0].delayMs <= elapsed) {
+				const renderDie = scheduledDice.shift()
+				const body = physics.addDie(renderDie)
+				const state = stateById.get(renderDie.id)
+				state.body = body
+				activeBodies.push(body)
 			}
 
-			const speed = body.getLinearVelocity().length()
-			const tilt = body.getAngularVelocity().length()
-			if ((speed < .01 && tilt < .005) || body.timeout < 0) {
-				state.asleep = true
-				body.asleep = true
-				body.setMassProps(0, physics.vec(0, 0, 0))
-				body.forceActivationState(3)
-				body.setLinearVelocity(physics.vec(0, 0, 0))
-				body.setAngularVelocity(physics.vec(0, 0, 0))
-				sleepingBodies.push(activeBodies.splice(i, 1)[0])
-			} else {
-				body.timeout -= dt
+			physics.physicsWorld.stepSimulation(dt / 1000, 2, 1 / 90)
+
+			for (let i = activeBodies.length - 1; i >= 0; i--) {
+				const body = activeBodies[i]
+				const transform = physics.getTransform(body)
+				const state = stateById.get(body.id)
+				if (transform) {
+					state.position = transform.position
+					state.quaternion = transform.quaternion
+				}
+
+				const speed = body.getLinearVelocity().length()
+				const tilt = body.getAngularVelocity().length()
+				if ((speed < .01 && tilt < .005) || body.timeout < 0) {
+					state.asleep = true
+					body.asleep = true
+					body.setMassProps(0, physics.vec(0, 0, 0))
+					body.forceActivationState(3)
+					body.setLinearVelocity(physics.vec(0, 0, 0))
+					body.setAngularVelocity(physics.vec(0, 0, 0))
+					sleepingBodies.push(activeBodies.splice(i, 1)[0])
+				} else {
+					body.timeout -= dt
+				}
+			}
+
+			pushFrame()
+
+			if (!scheduledDice.length && activeBodies.length === 0 && sleepingBodies.length === renderDice.length) {
+				materializeResults()
+				const parserRun = parsedRoll.parsedTree
+					? runParserWithPhysicalRolls(parsedRoll.parsedTree, results, {
+						maxRerollDepth: options.maxRerollDepth,
+					})
+					: { complete: true }
+
+				if (parserRun.complete) {
+					finalResult = computeFinalResult(parsedRoll.parsedTree, results, {
+						originalNotation: parsedRoll.originalNotation || (Array.isArray(notation) ? notation.join(',') : String(notation)),
+						maxRerollDepth: options.maxRerollDepth,
+					})
+					complete = true
+					break
+				}
+
+				if (rerollCount >= options.maxRerollDepth) {
+					throw new Error(`Roll notation exceeded the maximum reroll/explode depth of ${options.maxRerollDepth}.`)
+				}
+				if (rolls.length + 1 > options.maxDiceCount) {
+					throw new Error(`Roll notation requests more than the maximum dice count of ${options.maxDiceCount}.`)
+				}
+				const previousRenderDiceCount = renderDice.length
+				appendRequestedRollData({
+					requestedRoll: parserRun.requestedRoll,
+					groups,
+					rolls,
+					renderDice,
+					themeData,
+					theme,
+					themeColor,
+					delay: options.delay,
+					elapsed,
+				})
+				renderDice.slice(previousRenderDiceCount).forEach(scheduleDie)
+				rerollCount++
+			}
+			elapsed += dt
+			if (frame === maxFrames - 1) {
+				timedOut = true
 			}
 		}
-
-		pushFrame()
-
-		if (!scheduledDice.length && activeBodies.length === 0 && sleepingBodies.length === renderDice.length) {
-			break
+		if (!complete && !timedOut) {
+			materializeResults()
+			finalResult = computeFinalResult(parsedRoll.parsedTree, results, {
+				originalNotation: parsedRoll.originalNotation || (Array.isArray(notation) ? notation.join(',') : String(notation)),
+				maxRerollDepth: options.maxRerollDepth,
+			})
+			complete = true
 		}
-		elapsed += dt
-		if (frame === maxFrames - 1) {
-			timedOut = true
-		}
-	}
-
-	const valueByRenderId = new Map()
-	renderDice.forEach(renderDie => {
-		const state = stateById.get(renderDie.id)
-		valueByRenderId.set(renderDie.id, resolveDieValue({ renderDie, state, themeData }))
-	})
-
-	rollResults = rolls.map(roll => {
-		let value = valueByRenderId.get(roll.id)
-		if (roll.sides === 100 && roll.data !== 'single') {
-			value += valueByRenderId.get(roll.id + 10000)
-		}
-		return {
-			...roll,
-			value,
-		}
-	})
-
-	results = groups.map(group => {
-		const groupRolls = rollResults.filter(roll => roll.groupId === group.id)
-		const value = groupRolls.reduce((total, roll) => total + roll.value, 0) + group.modifier
-		return {
-			id: group.id,
-			qty: groupRolls.length,
-			sides: group.sides,
-			modifier: group.modifier,
-			notation: group.notation,
-			value,
-			rolls: groupRolls.map(({ collectionId, id, meshName, ...roll }) => roll),
-		}
-	})
-	finalResult = computeFinalResult(parsedRoll.parsedTree, results, {
-		originalNotation: parsedRoll.originalNotation || (Array.isArray(notation) ? notation.join(',') : String(notation)),
-		maxRerollDepth: options.maxRerollDepth,
-	})
 	} finally {
 		physics.cleanup()
 	}
 
-	const frameData = new Float32Array(floats)
-	const frameCount = frameData.length / (renderDice.length * frameStride)
+	if (!complete && !finalResult) {
+		timedOut = true
+		if (results) {
+			finalResult = computeFinalResult(parsedRoll.parsedTree, results, {
+				originalNotation: parsedRoll.originalNotation || (Array.isArray(notation) ? notation.join(',') : String(notation)),
+				maxRerollDepth: options.maxRerollDepth,
+			})
+		}
+	}
+
+	const frameData = flattenFrameRows()
+	const frameCount = renderDice.length ? frameData.length / (renderDice.length * frameStride) : 0
+	const flattenedRolls = results?.flatMap(group => group.rolls || []) || []
 
 	return {
 		version: 1,
@@ -717,7 +875,7 @@ export const simulateRollWithLoaders = async ({
 			},
 			results,
 			finalResult,
-			rolls: rollResults,
+			rolls: flattenedRolls,
 			renderDice: renderDice.map(({ delayMs, newStartPoint, ...die }) => die),
 			frame: {
 				type: 'Float32Array',
